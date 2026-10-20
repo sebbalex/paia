@@ -77,9 +77,12 @@ downloaded.
 
 ## Local run
 
+New here? **`ONBOARDING.md`** walks the whole setup; `scripts/onboard.py`
+asks every question and writes `.env`, the briefs and the instance for you.
+
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env    # fill in the tokens
+python3 scripts/onboard.py    # or: cp .env.example .env and fill in the tokens
 .venv/bin/python -m assistant.main
 ```
 

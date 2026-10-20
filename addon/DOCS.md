@@ -60,11 +60,37 @@ what it runs next boot even if the in-process policy were bypassed. Editing
 those files means shipping a new image version, which is the point.
 
 Your briefs are the exception. On first start, template briefs are seeded
-into **`/addon_configs/<slug>/context/`**, reachable from the File Editor
-add-on or over Samba, and copied in read-only at every start. Fill in the
-lines marked **TO FILL**, then restart; that folder is the authority from then
-on. The image ships no one's memory: the wiki starts as empty pages and every
+into **`/addon_configs/<hash>_paia/context/`** — `<hash>` is the short prefix
+Home Assistant gives this add-on repository; it is the only `*_paia` folder
+there — and copied in read-only at every start. That folder is the authority
+from then on; the assistant can read the copy but never write either one.
+The image ships no one's memory: the wiki starts as empty pages and every
 example routine starts disabled.
+
+### Filling in your briefs
+
+1. Start the add-on once, so the folder is seeded.
+2. Open it, whichever way you have:
+   - **Samba share** add-on: the `addon_configs` share. From a Mac, Finder →
+     ⌘K → `smb://homeassistant.local/addon_configs`.
+   - **Studio Code Server** add-on: `/addon_configs` is in its file tree.
+   - **File editor** add-on: it shows only `/homeassistant` by default; turn
+     off `enforce_basepath` in its configuration to browse up to
+     `/addon_configs`.
+3. Fill in the lines marked **TO FILL** in each `.md` file, in English, and
+   read the rest — every line is a default you may change.
+4. Restart the add-on. Edits take effect only on restart.
+
+Or let the wizard do steps 2–3 from a laptop with a clone of the repo and the
+Samba share mounted. It asks the questions, fills the briefs on the share, and
+prints these options as YAML for the Configuration tab:
+
+```sh
+python3 scripts/onboard.py --addon --root /Volumes/addon_configs/<hash>_paia
+```
+
+The wiki lives in `/data`, out of reach of the share. You fill it by talking
+to the bot — see part 3 of `ONBOARDING.md`.
 
 `/data/options.json` holds your tokens and sits outside the assistant's root,
 so it is not readable by any tool the model has.
