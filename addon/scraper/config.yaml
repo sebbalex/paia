@@ -1,0 +1,61 @@
+name: PAIA Scraper
+version: "0.1.0"
+slug: paia-scraper
+description: >-
+  The fetch ladder behind price scouting: a Chrome-fingerprinted request, then
+  a headless browser, then a real one, then a real one driven through the
+  kernel. The assistant add-on reaches it over the internal network.
+url: https://github.com/sebbalex/paia
+
+image: ghcr.io/sebbalex/paia-scraper
+
+# Same two as the assistant. Chromium has no armv7 story worth having either.
+arch:
+  - aarch64
+  - amd64
+
+startup: services
+boot: auto
+
+# No ports: block at all. The assistant reaches this by container name on the
+# add-on network; nothing outside Docker gets a route, which is the actual
+# security boundary. SCRAPER_TOKEN is only there to stop another process on the
+# same host using it by accident.
+host_network: false
+
+# Tier 4 writes to /dev/uinput to create a virtual input device. That is what
+# makes a click arrive at the page with isTrusted true, and it is the only
+# reason this add-on needs anything unusual. Without it the add-on still runs
+# and tiers 1-3 still work -- the ladder reports tier 4 unavailable and stops
+# there.
+devices:
+  - /dev/uinput
+# /dev/dri is the Pi's V3D. With it, tier 3 gets real WebGL and reports a
+# vendor string a real machine also reports. Without it Chromium falls back to
+# SwiftShader, whose vendor string is itself a detection signal -- see the note
+# in scraper/tiers/headful.py. Comment this out on a host that has no GPU.
+  - /dev/dri
+privileged:
+  - SYS_ADMIN
+
+map:
+  - type: addon_config
+    read_only: false
+
+options:
+  token: ""
+  repair_budget: 20
+  log_level: INFO
+
+schema:
+  # Shared with the assistant add-on's scraper_token. Any string; generate one
+  # rather than choosing one.
+  token: password?
+  # How many times a day a broken selector may be repaired by asking the model.
+  # The failure mode of an auto-healing system is healing the same thing forty
+  # times an hour while the real problem is somewhere else.
+  repair_budget: int(0,200)?
+  log_level: list(DEBUG|INFO|WARNING|ERROR)?
+  # Force the GL backend for tier 3: egl for real hardware through /dev/dri,
+  # angle for software rendering. Empty probes for /dev/dri and picks.
+  gl: list(egl|angle)?

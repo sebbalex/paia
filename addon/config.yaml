@@ -1,0 +1,125 @@
+name: PAIA
+version: "0.1.0"
+slug: paia
+description: >-
+  A personal assistant that lives on this machine, talks over Telegram, and
+  remembers. Claude Agent SDK, a curated wiki, and scheduled routines.
+url: https://github.com/sebbalex/paia
+
+# Pre-built and pulled from GitHub Packages: the supervisor never compiles
+# anything on the Pi. The tag is the `version` above.
+image: ghcr.io/sebbalex/paia
+
+# aarch64 and amd64 only. ctranslate2 and onnxruntime, behind faster-whisper,
+# publish no armv7 wheels, and Bun -- which claude-mem needs -- has no 32-bit
+# ARM build at all. A 32-bit Raspberry Pi OS cannot run this add-on.
+arch:
+  - aarch64
+  - amd64
+
+startup: application
+boot: auto
+
+# No inbound port: Telegram is long-polled, so nothing listens and nothing
+# needs forwarding through the router.
+host_network: false
+
+# /data is always mapped. addon_config gives the owner a folder they can edit from
+# the file editor or over Samba; the add-on seeds it with context/ on first
+# start and reads the briefs from there afterwards.
+map:
+  - type: addon_config
+    read_only: false
+
+options:
+  telegram_bot_token: ""
+  telegram_allowed_user_ids: []
+  claude_oauth_token: ""
+  model: claude-opus-5
+  owner_name: ""
+  owner_language: English
+  skills:
+    - price-hunt
+    - adventure-log
+    - trip-design
+  drive_allowed_folders: []
+  drive_write_folders: ""
+  whisper_model: base
+  whisper_language: ""
+  distill_hour: 3
+  scraper_url: ""
+
+schema:
+  # -- required ----------------------------------------------------------
+  # @BotFather gives the token, @userinfobot gives the numeric id. That list
+  # is the whole access control model: a message from any other id is dropped
+  # by the transport before the model ever sees it.
+  telegram_bot_token: password
+  telegram_allowed_user_ids:
+    - int
+
+  # Exactly one of the two. claude_oauth_token comes from `claude setup-token`
+  # and bills against a Claude plan; anthropic_api_key is metered API billing.
+  # They are not interchangeable, and setting both fails at start rather than
+  # silently letting the key shadow the token.
+  claude_oauth_token: password?
+  anthropic_api_key: password?
+
+  # -- optional ----------------------------------------------------------
+  model: str?
+  # Who the assistant serves and the language they read. The rules in the
+  # image say "the owner"; these make it a person.
+  owner_name: str?
+  owner_language: str?
+  # Which skills are live. A skill in .claude/skills/ that is not named here
+  # is invisible to the assistant and refused if it names one anyway.
+  skills:
+    - str
+  # Folder ids the assistant may read on Google Drive, plus everything beneath
+  # them. Empty means the whole Drive, which is the old behaviour and not a
+  # safe default.
+  drive_allowed_folders:
+    - str
+  # The single folder a new Google Doc may be created in. It must also appear
+  # in drive_allowed_folders, or the assistant cannot read back what it wrote.
+  # Empty means it creates nothing at Drive.
+  drive_write_folders: str?
+  web_fetch_allowed_domains:
+    - str
+  # The scraper worker add-on, if it is installed. Empty means the three page
+  # tools are not offered and price hunting falls back to search -- which is
+  # how it worked before, not a breakage. With the sidecar installed this is
+  # its container name on the add-on network:
+  #   http://addon_sebbalex_paia-scraper:8099
+  # There is no published port on either side; the add-on network is the only
+  # route, which is the actual boundary. The token stops another process on
+  # this host using the worker by accident and must match the one set in the
+  # scraper add-on's own options.
+  scraper_url: str?
+  scraper_token: password?
+  # Intervals.icu for the cycling coach: Settings > Developer Settings gives
+  # both. Either empty and the six coach tools are not offered. The cutover
+  # is the day a new watch took over overnight HRV (YYYY-MM-DD); HRV and
+  # RHR baselines start there, because Apple and Garmin HRV do not compare.
+  intervals_api_key: password?
+  intervals_athlete_id: str?
+  hrv_cutover_date: str?
+  # `base` is the sensible size on a Raspberry Pi 4: `small` is better Italian
+  # and noticeably slower on this CPU. Weights download into /data on the
+  # first voice note, not into the image.
+  whisper_model: list(tiny|base|small|medium|large-v3)?
+  whisper_language: str?
+  # Hour of the night at which scripts/distill.py promotes the raw log into
+  # the wiki. Remove the option entirely to turn distillation off.
+  distill_hour: int(0,23)?
+
+  # Mail for routines that deliver by email. Without these, a routine with
+  # `channel: email` falls back to Telegram rather than losing the result.
+  smtp_host: str?
+  smtp_port: port?
+  smtp_user: str?
+  smtp_password: password?
+  smtp_from: str?
+  smtp_to: str?
+  mail_to: str?
+  smtp_tls: bool?

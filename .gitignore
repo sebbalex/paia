@@ -1,0 +1,36 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+# The scraper worker's own venv. Separate from .venv because the assistant must
+# stay installable on a machine with no browser: Chromium and its Python side
+# are ~500 MB that a Telegram bot has no use for. See scraper/requirements.txt.
+.venv-scraper/
+state/
+
+# Conversation logs stay on the machine. memory/wiki/ is the tracked memory --
+# curated, reviewable, safe to push. memory/raw/ is every exchange verbatim,
+# which is not something to hand to a remote by accident.
+memory/raw/*
+!memory/raw/.gitkeep
+
+# Whisper model weights: hundreds of MB, downloaded once at deploy.
+models/
+
+# Attachments received over Telegram: the owner's, not the repository's.
+inbox/*
+!inbox/.gitkeep
+
+# macOS
+.DS_Store
+
+# The owner's instance: briefs, memory, routines. Private: never in the public
+# repo, never in the image. A fresh install is seeded from defaults/; the
+# owner versions their own copy in .instance.git (see README).
+context/*
+!context/.gitkeep
+memory/wiki/*
+!memory/wiki/.gitkeep
+routines/*
+!routines/.gitkeep
+.instance.git/

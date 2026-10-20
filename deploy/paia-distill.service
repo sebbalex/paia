@@ -1,0 +1,10 @@
+[Unit]
+Description=paia nightly memory distillation
+
+[Service]
+Type=oneshot
+User=assistant
+Group=assistant
+WorkingDirectory=/opt/paia
+EnvironmentFile=/opt/paia/.env
+ExecStart=/opt/paia/.venv/bin/python scripts/distill.py

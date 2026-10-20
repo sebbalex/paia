@@ -1,0 +1,36 @@
+# Secrets and machine state never enter the image.
+.env
+.env.*
+state/
+.git/
+.github/
+
+# Conversation logs stay on the machine they were spoken on.
+memory/raw/*
+!memory/raw/.gitkeep
+
+# Attachments are the owner's, not the image's.
+inbox/*
+!inbox/.gitkeep
+
+# Whisper weights are fetched into /data on first use, not baked in: they are
+# hundreds of megabytes and depend on WHISPER_MODEL, which is an add-on option.
+models/
+
+# Host build artefacts.
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+tests/
+
+# The owner's instance: briefs, memory, routines. Private: never in the public
+# repo, never in the image. A fresh install is seeded from defaults/; the
+# owner versions their own copy in .instance.git (see README).
+context/*
+!context/.gitkeep
+memory/wiki/*
+!memory/wiki/.gitkeep
+routines/*
+!routines/.gitkeep
+.instance.git/

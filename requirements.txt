@@ -1,0 +1,21 @@
+claude-agent-sdk>=0.1.0
+httpx>=0.27
+python-dotenv>=1.0
+
+# Voice transcription, on this machine. Pulls in ctranslate2 (inference), av
+# (OGG/Opus decoding, so there is no separate ffmpeg to install) and
+# onnxruntime for the VAD. Drop this line and voice notes stop working; the
+# rest keeps running.
+faster-whisper>=1.2
+
+# Parsing the cron expressions on scheduled routines.
+croniter>=2.0
+
+# Text out of the PDFs on Drive (drive_read_file). Pure Python, no system
+# dependency. No OCR: a scanned PDF has no text in it and is refused as a scan
+# rather than guessed at.
+pypdf>=6.0
+
+# Charts for the coach's reports (assistant/coach_charts.py), drawn to PNG
+# with the Agg backend: no display, no system fonts needed (ships DejaVu).
+matplotlib>=3.8

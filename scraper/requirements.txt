@@ -1,0 +1,25 @@
+# The worker's own dependencies. Deliberately not merged into the repo-root
+# requirements.txt: the assistant must stay installable on a machine that has
+# no browser, and Chromium is 400 MB of it.
+#
+# Tier 1. This is the dependency that does the actual work: curl_cffi speaks
+# TLS with Chrome's JA3/JA4 fingerprint and Chrome's HTTP/2 frame ordering.
+# A User-Agent header is not what Cloudflare's cheap rule matches on -- the
+# ClientHello is, and stock httpx/requests announce themselves as Python in it.
+# memory/wiki/log.md:485 records a browser UA being tried with curl and still
+# taking a 403; this is the variable that was never changed.
+curl_cffi>=0.7
+
+# Step 4 of the extraction chain, the per-domain CSS selectors. Steps 1-3
+# (JSON-LD, microdata, meta) are stdlib-only on purpose, so the part that
+# answers most shops keeps working -- and stays testable -- without this.
+selectolax>=0.3.21
+
+# Tiers 2-4. On linux/arm64 Playwright ships no Chromium of its own: the image
+# installs Debian's `chromium` package and passes executable_path. See
+# docker/scraper.Dockerfile.
+playwright>=1.47
+
+# No HTTP framework here on purpose. scraper/app.py uses http.server: the
+# worker binds loopback, serves one user, and has four routes. FastAPI plus
+# uvicorn would be more dependencies than the whole assistant has.

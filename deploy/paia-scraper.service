@@ -1,0 +1,66 @@
+[Unit]
+Description=paia scraper worker (deterministic fetch ladder)
+After=network-online.target
+Wants=network-online.target
+# The assistant does not need the worker to start -- an empty SCRAPER_URL just
+# means the page tools are not offered -- so this is Wants, not Requires. A
+# wedged Chromium must never keep Telegram down.
+Before=paia.service
+
+[Service]
+Type=simple
+User=scraper
+Group=scraper
+# Tier 4 writes to /dev/uinput, which is group input.
+SupplementaryGroups=input video render
+WorkingDirectory=/opt/paia
+EnvironmentFile=/opt/paia/.env
+Environment=SCRAPER_HOST=127.0.0.1
+Environment=DISPLAY=:99
+ExecStartPre=/usr/bin/Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
+ExecStart=/opt/paia/.venv-scraper/bin/python -m scraper.app
+Restart=always
+RestartSec=5
+
+# Hardened like the assistant, with two deliberate differences.
+#
+# MemoryDenyWriteExecute is NOT set. Chromium's V8 JIT needs W^X, exactly as
+# the assistant's Node runtime does -- see the same note in
+# paia.service. Setting it here produces a browser that dies on the
+# first page with JavaScript on it.
+#
+# The device rules are the whole reason tier 4 exists: /dev/uinput is what
+# makes an event arrive at the page with isTrusted true, and /dev/dri is what
+# gives tier 3 a WebGL vendor string a real machine also reports.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+DevicePolicy=closed
+DeviceAllow=/dev/uinput rw
+DeviceAllow=/dev/dri rw
+
+# Only its own state. The worker owns state/scraper/ -- recipes, browser
+# profiles, the repair budget -- and nothing else on disk. It must not be able
+# to write memory/wiki/: what the assistant records about a shop is a decision
+# the assistant makes after reading the result, not something a fetcher edits.
+ReadOnlyPaths=/opt/paia
+ReadWritePaths=/opt/paia/state/scraper
+
+# A browser is not a small process, and this one shares a Raspberry Pi with a
+# whisper model. A hard ceiling turns "the Pi swapped itself to death" into
+# "the scraper restarted", which is recoverable and visible in the journal.
+MemoryMax=1200M
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

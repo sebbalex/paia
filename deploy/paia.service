@@ -1,0 +1,45 @@
+[Unit]
+Description=paia personal assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=assistant
+Group=assistant
+WorkingDirectory=/opt/paia
+EnvironmentFile=/opt/paia/.env
+ExecStart=/opt/paia/.venv/bin/python -m assistant.main
+Restart=always
+RestartSec=5
+
+# The assistant has file tools, so assume the in-process policy can fail and
+# make the filesystem enforce the same shape. Only memory/ and state/ are
+# writable: the code, the unit files, and IDENTITY/ROT/CLAUDE.md are read-only
+# to the process that runs the model, so no tool call and no injected
+# instruction can rewrite what the assistant is or what it runs next boot.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/paia
+ReadWritePaths=/opt/paia/memory /opt/paia/state /opt/paia/inbox /opt/paia/routines
+# models/ stays read-only: the weights are downloaded at deploy, not runtime.
+ReadWritePaths=/home/assistant/.claude /home/assistant/.claude-mem
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Deliberately NOT set: MemoryDenyWriteExecute. The SDK runs the `claude` CLI
+# on Node, and blocking W^X memory breaks the V8 JIT at startup.
+
+[Install]
+WantedBy=multi-user.target
