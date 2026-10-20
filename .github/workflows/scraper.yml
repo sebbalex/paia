@@ -1,0 +1,127 @@
+# Build the scraper add-on image and push it to GitHub Packages.
+#
+# Same shape as addon.yml -- native runner per architecture, push by digest,
+# one multi-arch manifest -- for docker/scraper.Dockerfile. Separate workflow
+# because the two images change for different reasons: a fix to the assistant
+# should not rebuild 500 MB of Chromium, and the other way round.
+name: scraper add-on
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scraper/**"
+      - "docker/scraper.Dockerfile"
+      - "docker/scraper-entrypoint.sh"
+      - "addon/scraper/**"
+      - ".github/workflows/scraper.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}-scraper
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the add-on manifest
+        continue-on-error: true
+        uses: frenck/action-addon-linter@v2
+        with:
+          path: ./addon/scraper
+
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.read.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        # The tag has to equal `version` in the scraper's manifest.
+        run: |
+          value=$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' addon/scraper/config.yaml)
+          test -n "$value" || { echo "no version in addon/scraper/config.yaml"; exit 1; }
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "building $value"
+
+  build:
+    needs: [lint, version]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/scraper.Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: BUILD_VERSION=${{ needs.version.outputs.value }}
+          provenance: false
+          cache-from: type=gha,scope=scraper-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=scraper-${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scraper-digest-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  merge:
+    needs: [build, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: scraper-digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the multi-arch manifest
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "$REGISTRY/$IMAGE:${{ needs.version.outputs.value }}" \
+            -t "$REGISTRY/$IMAGE:latest" \
+            $(printf "$REGISTRY/$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$REGISTRY/$IMAGE:${{ needs.version.outputs.value }}"
