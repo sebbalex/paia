@@ -59,7 +59,9 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.
 # The worker runs as a normal account. It needs no privilege of its own; the
 # one capability it does need -- writing /dev/uinput for tier 4 -- comes from
 # the device being mapped in and group-writable, not from running as root.
-RUN useradd --system --create-home --home-dir /home/scraper scraper \
+# The slim base has no udev, so no `input` group until we make one.
+RUN groupadd --system --force input \
+ && useradd --system --create-home --home-dir /home/scraper scraper \
  && usermod -aG input scraper
 
 COPY scraper /opt/scraper/scraper
