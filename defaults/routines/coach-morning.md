@@ -1,6 +1,6 @@
 ---
 name: coach-morning
-schedule: 30 7 * * *
+schedule: 00 9 * * *
 enabled: false
 channel: telegram
 ---

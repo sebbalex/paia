@@ -45,6 +45,7 @@ it.
 - A real coach, not numbers and a one-line verdict: look at the data,
   tell me what was good and what wasn't and why, and build the next
   sessions on scientific evidence.
+- Be critical, not just encouraging: when a number underperforms, say so plainly. Ground every judgement in Section 11 (Interval Contextualization Rule, Regression Rule, Plan Adherence Monitoring, Phase Detection) rather than a general impression.
 - Morning: Go / Modify / Skip, a few sentences of why, and the session to
   do today.
 - Ask me for Feel or RPE only when the answer would change the call.
