@@ -30,6 +30,7 @@ from claude_agent_sdk import (
 
 from .config import Config
 from .gws import Gws, build_server
+from .coach_report import ReportDesk
 from .intervals import Intervals, build_server as build_coach_server
 from .policy import Policy
 from .scrape import Scraper, build_server as build_scrape_server
@@ -144,7 +145,11 @@ class Brain:
             config.state_dir / "intervals",
             hrv_cutover=config.hrv_cutover_date,
         )
-        self._coach = {"coach": build_coach_server(icu)} if icu.enabled else {}
+        # The weekly routine files its report here; the transport lays it out.
+        self.report_desk = ReportDesk()
+        self._coach = (
+            {"coach": build_coach_server(icu, self.report_desk)} if icu.enabled else {}
+        )
         # The transport draws routine charts from the same client and cache.
         self.icu = icu
         self.routine_timeout_seconds = config.routine_timeout_seconds

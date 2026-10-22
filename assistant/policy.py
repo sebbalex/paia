@@ -180,10 +180,14 @@ _COACH_TOOL = re.compile(
     r"\Amcp__coach__("
     r"coach_readiness|coach_load|coach_activity|coach_sessions"
     r"|coach_week|coach_history|coach_power_curve|coach_thresholds"
-    r"|coach_plan_workout"
+    r"|coach_plan_workout|coach_report"
     r")\Z"
 )
 _COACH_WRITE = "mcp__coach__coach_plan_workout"
+# Files the weekly report for the transport to mail to MAIL_TO. Routine turns
+# only: in chat the answer is the reply itself, and a report filed there would
+# sit on the desk until a routine picked it up.
+_COACH_REPORT = "mcp__coach__coach_report"
 
 
 @dataclass(frozen=True)
@@ -310,6 +314,11 @@ class Policy:
                     )
                 if tool == _COACH_WRITE:
                     return self._check_plan(tool_input)
+                if tool == _COACH_REPORT:
+                    if not self._routine:
+                        return Decision(False, "coach_report is for the weekly routine "
+                                               "only -- in chat, answer in the reply")
+                    return Decision(True, "weekly report, filed for the transport")
                 return Decision(True, "Intervals.icu, read")
             return Decision(
                 False,

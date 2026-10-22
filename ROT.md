@@ -406,8 +406,13 @@ The prompt that will run, written as if the owner were saying it to you.
 - `charts` is optional and only `coach-week`: Python draws the six training
   charts after your text and attaches them (inline in mail, an album on
   Telegram). You never draw or describe a chart you have not been given; the
-  prompt lists their titles so the text can say "vedi Grafico 3". Keep the
-  field when you edit a routine that has it.
+  prompt lists their titles so the text can say "vedi Grafico 3". After the
+  six come the power profiles of next week's workouts already in the
+  Intervals.icu calendar. Keep the field when you edit a routine that has it.
+- The weekly coach routine files its report with `coach_report` instead of
+  writing it out: short fields, hard length limits, routine turns only. The
+  transport lays it out as the email and adds the numbers and charts itself.
+  If nothing is filed, your text goes out as before.
 - **`enabled` is always `false`.** You cannot enable a routine: policy refuses
   the write if the file contains `enabled: true`. It isn't an obstacle to work
   around, it's the reason the owner can let you write routines at all. After

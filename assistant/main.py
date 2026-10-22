@@ -14,6 +14,7 @@ from pathlib import Path
 import tempfile
 
 from . import coach_charts
+from . import coach_report
 from . import config as config_module
 from . import memory
 from . import routines as routines_module
@@ -203,6 +204,9 @@ async def _run_routine(brain: Brain, delivery: Delivery,
                        routine: "routines_module.Routine") -> None:
     """Run a routine and deliver the result."""
     log.info("routine '%s' running", routine.name)
+    desk = getattr(brain, "report_desk", None)
+    if desk is not None:
+        desk.clear()
     try:
         turn = await brain.ask(routine.prompt, timeout=getattr(
             brain, "routine_timeout_seconds", None), routine=True)
@@ -215,9 +219,34 @@ async def _run_routine(brain: Brain, delivery: Delivery,
         # A transport error is not a result: say it, don't file it.
         await delivery.send("telegram", f"Routine {routine.name}", turn.text)
         return
+    report = desk.take() if desk is not None else None
+    if report is not None and await _send_report(brain, delivery, routine, report):
+        return
     charts, note = await _charts_for(brain, routine)
     body = turn.text + (f"\n\n_{note}_" if note else "")
     await delivery.send(routine.channel, f"Routine {routine.name}", body, charts)
+
+
+async def _send_report(brain: Brain, delivery: Delivery,
+                       routine: "routines_module.Routine", report: dict) -> bool:
+    """Lay out and send a report the routine filed with coach_report.
+
+    False when the numbers cannot be read: the caller then sends the model's
+    own text, so the week is still reported, only plainer.
+    """
+    try:
+        facts = await coach_report.facts(brain.icu, datetime.now().date(), report)
+    except Exception:
+        log.exception("routine '%s': report facts failed", routine.name)
+        return False
+    text = coach_report.render_text(report, facts)
+    charts = facts.charts + list(facts.workouts.values())
+    await delivery.send_built(
+        routine.channel,
+        lambda sender, to: coach_report.build_email(report, facts, sender, to),
+        text, charts,
+    )
+    return True
 
 
 async def _charts_for(brain: Brain, routine: "routines_module.Routine"):

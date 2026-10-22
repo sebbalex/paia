@@ -581,6 +581,12 @@ def test_gate() -> None:
     check("routine cannot confirm",
           policy.check(plan, {**args, "confirm": True}).allow, False)
     check("routine still reads", policy.check("mcp__coach__coach_week", {}).allow, True)
+    check("routine files the weekly report",
+          policy.check("mcp__coach__coach_report", {}).allow, True)
+    policy.begin_turn()
+    policy.check("Read", {"file_path": str(s11 / "SECTION_11.md")})
+    check("chat cannot file the weekly report",
+          policy.check("mcp__coach__coach_report", {}).allow, False)
     check("trailing newline denied",
           policy.check("mcp__coach__coach_load\n", {}).allow, False)
     check("intervals cache unreadable",

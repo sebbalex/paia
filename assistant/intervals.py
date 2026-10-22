@@ -1086,8 +1086,12 @@ def _fail(message: str, hint: str = "") -> dict[str, Any]:
 # -- the tools --------------------------------------------------------------
 
 
-def build_tools(icu: Intervals, clock=date.today) -> list[Any]:
-    """The tools, bound to one client. `clock` is injectable for tests."""
+def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]:
+    """The tools, bound to one client. `clock` is injectable for tests.
+
+    `desk` is a coach_report.ReportDesk: where `coach_report` leaves the
+    weekly report for the transport. Without one the tool is absent.
+    """
 
     @tool(
         "coach_readiness",
@@ -1372,17 +1376,44 @@ def build_tools(icu: Intervals, clock=date.today) -> list[Any]:
         log.info("intervals: planned workout %s on %s", result.get("id"), result.get("date"))
         return _text(result, {})
 
-    return [
+    from . import coach_report as report_mod
+
+    @tool(
+        "coach_report",
+        "File the weekly training report, in the owner's language. Only the "
+        "weekly routine calls it, once, at the end. Short fields with hard "
+        "length limits -- a field over its limit is refused, cut it and file "
+        "again. The system lays the report out as the email and adds every "
+        "number itself (load, hours, CTL, form, HRV, eFTP, intensity, weeks "
+        "to the goal) and the charts, including a power profile for each day "
+        "of next week that has a workout: so write judgement, not numbers "
+        "the tiles already show.",
+        report_mod.SCHEMA,
+    )
+    async def coach_report(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            report = report_mod.validate(args, clock())
+        except ValueError as exc:
+            return _fail(str(exc))
+        desk.file(report)
+        drawn = sum(1 for d in report["next_week"] if report_mod.cc.parse_workout(d["workout"]))
+        return _text({"filed": True, "days": len(report["next_week"]),
+                      "workouts_from_text": drawn,
+                      "next": "the report is sent after this turn; end with one line"}, {})
+
+    tools = [
         coach_readiness, coach_load, coach_activity, coach_sessions,
         coach_week, coach_history, coach_power_curve, coach_thresholds,
         coach_plan_workout,
     ]
+    return tools + ([coach_report] if desk is not None else [])
 
 
-def build_server(icu: Intervals):
+def build_server(icu: Intervals, desk: Any = None):
     """The in-process MCP server the Brain hands to the SDK.
 
     Tool names reach the model as mcp__coach__<name>, which assistant/policy.py
     pins -- the same two locks as gws and scrape.
     """
-    return create_sdk_mcp_server(name="coach", version="1.0.0", tools=build_tools(icu))
+    return create_sdk_mcp_server(name="coach", version="1.0.0",
+                                 tools=build_tools(icu, desk=desk))

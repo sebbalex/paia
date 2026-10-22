@@ -331,6 +331,13 @@ and `coach_power_curve` when fitness is the question. Then, in prose:
 4. Where they stand toward the goal event, in weeks and phase.
 5. Next week: the table and the two key sessions in full.
 
+That is the shape in chat. The Sunday routine files the same judgement
+through `coach_report` instead, and that tool's short fields win over the
+prose above: the system draws the numbers, the charts and the footer facts,
+so the report carries only what they mean. A key session's seven parts
+shrink to its `purpose` (targets and how we'll judge it) and its `workout`
+steps; the full seven parts still go in the wiki's "Last prescribed".
+
 ## 7. What goes in the wiki
 
 `memory/wiki/training.md`, with `index.md` and a `log.md` line (ROT 2, 3):

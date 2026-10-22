@@ -124,8 +124,31 @@ class Delivery:
                 [(c.filename, c.png, f"Grafico {i}: {c.title}") for i, c in enumerate(charts, 1)],
             )
 
+    async def send_built(self, channel: str, build, text: str, charts=()) -> None:
+        """Mail a message `build(sender, recipient)` makes; on Telegram, or if
+        mail fails, `text` and the charts instead. For layouts made elsewhere
+        (coach_report)."""
+        if channel == "email" and (self._mailer is not None or self._smtp.configured):
+            try:
+                if self._mailer is not None:
+                    await asyncio.to_thread(self._mailer.send,
+                                            build(None, self._mailer.recipient))
+                else:
+                    await asyncio.to_thread(self._smtp_send,
+                                            build(self._smtp.sender, self._smtp.recipient))
+                return
+            except Exception:
+                log.exception("mail failed, falling back to Telegram")
+                text += "\n\n_(invio email fallito, mandato qui)_"
+        await self._telegram.send(self._chat_id, text)
+        if charts:
+            await self._telegram.send_photos(
+                self._chat_id, [(c.filename, c.png, c.title) for c in charts])
+
     def _send_email(self, subject: str, body: str, charts=()) -> None:
-        message = build_email(subject, body, self._smtp.sender, self._smtp.recipient, charts)
+        self._smtp_send(build_email(subject, body, self._smtp.sender, self._smtp.recipient, charts))
+
+    def _smtp_send(self, message: EmailMessage) -> None:
         if self._smtp.use_tls:
             with smtplib.SMTP(self._smtp.host, self._smtp.port, timeout=30) as server:
                 server.starttls()
