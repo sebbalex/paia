@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.1.0"
+version: "0.2.0"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and

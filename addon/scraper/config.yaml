@@ -1,5 +1,5 @@
 name: PAIA Scraper
-version: "0.1.0"
+version: "0.1.1"
 slug: paia-scraper
 description: >-
   The fetch ladder behind price scouting: a Chrome-fingerprinted request, then
