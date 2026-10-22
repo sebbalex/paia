@@ -166,6 +166,11 @@ class Brain:
             # mcp-search MCP server). Drop "local" and the assistant loses its
             # memory index without any error message.
             setting_sources=["project", "local"],
+            # The CLI's auto-memory is keyed on cwd, not on setting_sources:
+            # left on, it injects the developer's ~/.claude/projects/<root>/
+            # memory/MEMORY.md, and the model then tries to Read files the
+            # policy rightly refuses. The assistant's memory is memory/wiki/.
+            env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
             system_prompt={
                 "type": "preset",
                 "preset": "claude_code",
