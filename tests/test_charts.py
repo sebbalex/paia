@@ -70,6 +70,67 @@ def main() -> int:
              cc.power_profile({}), cc.trend({})]
     check("no data still draws a placeholder", all(c.png.startswith(PNG) for c in empty), "")
 
+    print("\nworkout profiles")
+    text = """Set 1 8x
+- 30s 330-350w (121-128%)
+- 15s 50%
+
+- 10m ramp 55-40%
+- 5m Z2
+- 5m 70% HR
+"""
+    steps = cc.parse_workout(text)
+    check("repeat block parsed", steps[0].get("reps") == 8 and len(steps[0]["steps"]) == 2, str(steps))
+    check("first target wins: watts, not the % gloss",
+          steps[0]["steps"][0]["power"] == {"units": "w", "start": 330, "end": 350}, str(steps[0]))
+    check("blank line closes the repeat", steps[1].get("ramp") is True, str(steps[1]))
+    check("zone target", steps[2]["power"] == {"units": "power_zone", "value": 2}, str(steps[2]))
+    check("HR target is not power", "power" not in steps[3], str(steps[3]))
+    check("flattened by reps", len(cc._flat(steps)) == 19, str(len(cc._flat(steps))))
+    cal = [{"category": "WORKOUT", "name": "VO2 30/15", "start_date_local": "2026-10-28T00:00:00",
+            "icu_training_load": 40, "workout_doc": {"steps": [{"duration": 600, "power":
+            {"units": "%ftp", "value": 60}}]}},
+           {"category": "WORKOUT", "name": "Soglia", "start_date_local": "2026-10-27T00:00:00",
+            "workout_doc": {"steps": steps}},
+           {"category": "WORKOUT", "name": "Gambe", "type": "WeightTraining",
+            "start_date_local": "2026-10-26T00:00:00", "workout_doc": {"steps": []}}]
+    profiles = cc.planned_workouts(cal, 273, None)
+    check("calendar workouts in date order, gym without steps skipped",
+          [c.title for c in profiles] == ["Allenamento: Soglia, mar 27 ott",
+                                          "Allenamento: VO2 30/15, mer 28 ott"],
+          str([c.title for c in profiles]))
+    check("profiles are pngs", all(c.png.startswith(PNG) for c in profiles), "")
+    check("no ftp: placeholder, not a crash",
+          cc.workout_profile("x", None, steps, None).png.startswith(PNG), "")
+
+    import asyncio as _aio
+    from assistant import intervals as icu_mod
+
+    class FakeIcu:
+        hrv_cutover = None
+        asked = []
+        async def wellness(self, *a): return rows, {}
+        async def activities(self, *a): return acts, {}
+        async def sport_settings(self):
+            return [{"types": ["Ride"], "ftp": 273, "power_zones": [55, 78, 95, 105, 125, 150, 999]}], {}
+        async def power_curves(self): return {}, {}
+        async def events(self, oldest, newest, today):
+            self.asked.append((oldest, newest))
+            return cal, {}
+
+    fake = FakeIcu()
+    full = _aio.run(cc.render("coach-week", fake, today))
+    check("report: six charts, then next week's workouts",
+          [c.title for c in full[:6]] == cc.TITLES["coach-week"] and len(full) == 8,
+          str([c.title for c in full]))
+    check("events read for the week after",
+          fake.asked == [(today + timedelta(days=1), today + timedelta(days=7))], str(fake.asked))
+
+    async def broken(*a): raise icu_mod.IntervalsError("down")
+    fake.events = broken
+    full = _aio.run(cc.render("coach-week", fake, today))
+    check("calendar down: the six still drawn", len(full) == 6, str(len(full)))
+
     print("\nreport mail")
     msg = build_email("Routine coach-weekly", "**La settimana** in breve\nriga due",
                       "bot@x", "me@x", made[:2])
