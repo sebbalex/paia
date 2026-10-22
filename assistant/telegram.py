@@ -216,18 +216,22 @@ class Telegram:
         this call the chat shows the last menu set, forever, including commands
         the bot no longer handles. The list replaces, it does not add, so it is
         the single source of truth for what appears in the menu.
+
+        Private chats show the narrower `all_private_chats` menu over the
+        default one, and anything else on this token (the Claude Code
+        Telegram plugin, for one) writes there. So both scopes get the list.
         """
-        try:
-            await self._call(
-                "setMyCommands",
-                commands=[
-                    {"command": name, "description": description}
-                    for name, description in commands
-                ],
-            )
-        except Exception as exc:
-            # The menu is convenience, not function: carry on if it fails.
-            log.warning("setMyCommands failed (%s)", _redact(exc))
+        listed = [
+            {"command": name, "description": description}
+            for name, description in commands
+        ]
+        for scope in ({"type": "default"}, {"type": "all_private_chats"}):
+            try:
+                await self._call("setMyCommands", commands=listed, scope=scope)
+            except Exception as exc:
+                # The menu is convenience, not function: carry on if it fails.
+                log.warning("setMyCommands %s failed (%s)", scope["type"],
+                            _redact(exc))
 
 
 def _document_of(message: dict) -> Document | None:

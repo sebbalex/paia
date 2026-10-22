@@ -211,6 +211,9 @@ async def run() -> int:
     check("sends every command",
           [c["command"] for c in sent[0]["commands"]] == [n for n, _ in COMMANDS],
           str(sent[0]["commands"]))
+    check("writes the private-chat scope too, which beats default there",
+          {s.get("scope", {}).get("type") for s in sent}
+          == {"default", "all_private_chats"}, str(sent))
 
     async def boom(method, **params):
         raise RuntimeError("telegram down")
