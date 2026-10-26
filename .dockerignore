@@ -34,3 +34,7 @@ memory/wiki/*
 routines/*
 !routines/.gitkeep
 .instance.git/
+
+# Developer tooling, not part of any image.
+.githooks/
+tools/

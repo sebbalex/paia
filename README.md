@@ -159,7 +159,18 @@ docker/entrypoint.py    options -> environment, seed /data, drop privileges, sup
 addon/config.yaml       the manifest the Supervisor reads (version == image tag)
 repository.yaml         makes this repo an add-on repository
 .github/workflows/      native amd64 + arm64 runners -> one manifest on ghcr.io
+addon/CHANGELOG.md      what the add-on's Changelog tab shows before Update
 ```
+
+**Every change to an image's inputs ships with a version bump and a changelog
+entry**, because the Supervisor offers an update only when `version` changes
+and CI never rebuilds a published tag. A pre-commit hook enforces it; enable it
+once per clone with `git config core.hooksPath .githooks`. When a staged change
+touches an add-on's inputs and the commit lacks the bump or the entry, the hook
+runs `tools/addon_release.py`, which bumps the patch version and writes the
+entry from `$ADDON_CHANGELOG` or a prompt on the terminal, and stages both. For
+a minor or major bump, run it yourself first:
+`tools/addon_release.py bump paia --minor -m "what changed"`.
 
 Two things are worth knowing before reading further.
 

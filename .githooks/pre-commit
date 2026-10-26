@@ -1,0 +1,6 @@
+#!/bin/sh
+# Every commit that changes an add-on image's inputs must bump its version and
+# add a CHANGELOG.md entry, or Home Assistant never offers the update.
+# Enable once per clone: git config core.hooksPath .githooks
+# Skip for a commit that ships nothing on purpose: git commit --no-verify
+exec python3 "$(git rev-parse --show-toplevel)/tools/addon_release.py" check
