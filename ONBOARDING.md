@@ -93,7 +93,7 @@ about rather than guessing.
 | Section | Questions | Lands in |
 |---|---|---|
 | You | first name, answer language, timezone | `OWNER_NAME`, `OWNER_LANGUAGE`, `context/calendar-rules.md` |
-| Claude | subscription or API key, the credential, model | `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, `ASSISTANT_MODEL` |
+| Model | Claude subscription, Claude API key or OpenRouter, the credential, model | `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`, `ASSISTANT_MODEL` |
 | Telegram | bot token, who may talk to it | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS` |
 | Skills | each method in `.claude/skills/`, on or off | `ASSISTANT_SKILLS` |
 | Google | `gws` path, each calendar: show / background / ignore, mail address, trip folder and whether it is writable, other readable folders | `GWS_BIN`, `context/calendar-rules.md`, `memory/wiki/calendar.md`, `MAIL_TO`, `context/adventures-rules.md`, `DRIVE_ALLOWED_FOLDERS`, `DRIVE_WRITE_FOLDERS` |

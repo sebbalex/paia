@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.2.0"
+version: "0.3.0"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and
@@ -64,6 +64,11 @@ schema:
   # silently letting the key shadow the token.
   claude_oauth_token: password?
   anthropic_api_key: password?
+  # Or neither: any tool-calling model on OpenRouter. Set this alone, and
+  # `model` to an OpenRouter slug (vendor/model-name). No claude-mem then.
+  openrouter_api_key: password?
+  openrouter_search_model: str?
+  openrouter_images: bool?
 
   # -- optional ----------------------------------------------------------
   model: str?

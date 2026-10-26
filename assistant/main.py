@@ -18,7 +18,7 @@ from . import coach_report
 from . import config as config_module
 from . import memory
 from . import routines as routines_module
-from .agent import Brain
+from .agent import Brain, make_brain
 from .channels import Delivery, GwsMailer
 from .speech import Transcriber
 from .telegram import Incoming, Telegram
@@ -34,7 +34,7 @@ async def run() -> None:
     cfg = config_module.load()
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
 
-    brain = Brain(cfg)
+    brain = make_brain(cfg)
     telegram = Telegram(cfg.bot_token, cfg.allowed_user_ids)
     transcriber = Transcriber(
         model_name=cfg.whisper_model,

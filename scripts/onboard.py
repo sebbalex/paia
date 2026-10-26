@@ -57,6 +57,7 @@ _PLACEHOLDERS = {
 _SECRETS = {
     "CLAUDE_CODE_OAUTH_TOKEN",
     "ANTHROPIC_API_KEY",
+    "OPENROUTER_API_KEY",
     "TELEGRAM_BOT_TOKEN",
     "INTERVALS_API_KEY",
     "SCRAPER_TOKEN",
@@ -351,23 +352,45 @@ def interview(env: dict[str, str], briefs: Briefs, addon: bool) -> tuple[dict[st
         briefs.set("calendar-rules", "Timezone is", f"`{tz}`")
         break
 
-    section("Claude", "One credential, never both: the key silently shadows the token.")
+    section("Model", "One credential, never two: each one shadows or switches the others.")
+    current = (
+        2 if env.get("OPENROUTER_API_KEY")
+        else 1 if env.get("ANTHROPIC_API_KEY") and not env.get("CLAUDE_CODE_OAUTH_TOKEN")
+        else 0
+    )
     kind = choose(
         "How is it billed",
-        ["Claude subscription  (`claude setup-token`, sk-ant-oat...)", "API key  (console.anthropic.com, sk-ant-api...)"],
-        1 if env.get("ANTHROPIC_API_KEY") and not env.get("CLAUDE_CODE_OAUTH_TOKEN") else 0,
+        [
+            "Claude subscription  (`claude setup-token`, sk-ant-oat...)",
+            "Claude API key  (console.anthropic.com, sk-ant-api...)",
+            "OpenRouter  (any tool-calling model, sk-or-...; no claude-mem)",
+        ],
+        current,
     )
+    new["CLAUDE_CODE_OAUTH_TOKEN"] = new["ANTHROPIC_API_KEY"] = new["OPENROUTER_API_KEY"] = ""
     if kind == 0:
         token = ask_secret("OAuth token", env.get("CLAUDE_CODE_OAUTH_TOKEN", ""))
         if token and not token.startswith("sk-ant-oat"):
             print("  warning: that does not look like an sk-ant-oat token")
-        new["CLAUDE_CODE_OAUTH_TOKEN"], new["ANTHROPIC_API_KEY"] = token, ""
-    else:
+        new["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    elif kind == 1:
         key = ask_secret("API key", env.get("ANTHROPIC_API_KEY", ""))
         if key and not key.startswith("sk-ant-api"):
             print("  warning: that does not look like an sk-ant-api key")
-        new["ANTHROPIC_API_KEY"], new["CLAUDE_CODE_OAUTH_TOKEN"] = key, ""
-    new["ASSISTANT_MODEL"] = ask("Model", env.get("ASSISTANT_MODEL", "claude-opus-5"))
+        new["ANTHROPIC_API_KEY"] = key
+    else:
+        key = ask_secret("OpenRouter key", env.get("OPENROUTER_API_KEY", ""))
+        if key and not key.startswith("sk-or-"):
+            print("  warning: that does not look like an sk-or- key")
+        new["OPENROUTER_API_KEY"] = key
+    model = env.get("ASSISTANT_MODEL", "")
+    if kind == 2:
+        # assistant/config.py refuses to start on a name without a vendor.
+        while "/" not in (model := ask("OpenRouter model (vendor/model-name)", model if "/" in model else "")):
+            print("  an OpenRouter slug has a vendor: vendor/model-name")
+    else:
+        model = ask("Model", model if model and "/" not in model else "claude-opus-5")
+    new["ASSISTANT_MODEL"] = model
 
     section("Telegram", "Create a bot with @BotFather first; it gives you the token.")
     token = ask_secret("Bot token", env.get("TELEGRAM_BOT_TOKEN", ""))
@@ -521,6 +544,7 @@ _ADDON = {
     "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
     "CLAUDE_CODE_OAUTH_TOKEN": "claude_oauth_token",
     "ANTHROPIC_API_KEY": "anthropic_api_key",
+    "OPENROUTER_API_KEY": "openrouter_api_key",
     "ASSISTANT_MODEL": "model",
     "OWNER_NAME": "owner_name",
     "OWNER_LANGUAGE": "owner_language",

@@ -72,6 +72,15 @@ async def main() -> int:
     )
 
     prompt = PROMPT.format(log=log_path.relative_to(cfg.root))
+    if cfg.backend == "openrouter":
+        # No CLI to run it on: the OpenRouter loop, with the file tools only,
+        # and the policy gate in front of them -- stricter than acceptEdits.
+        from assistant.openrouter import run_once
+
+        turn = await run_once(cfg, prompt, ("Read", "Write", "Edit", "Glob", "Grep"))
+        print(turn.text)
+        return 0 if turn.ok else 1
+
     async for message in query(prompt=prompt, options=options):
         if isinstance(message, AssistantMessage):
             for block in message.content:

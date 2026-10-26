@@ -33,6 +33,24 @@ class Config:
     allowed_user_ids: frozenset[int]
     model: str
 
+    # -- which model ---------------------------------------------------------
+    # "claude" runs the Claude Agent SDK, with the CLI, claude-mem and its
+    # built-in tools. "openrouter" runs assistant/openrouter.py instead: any
+    # model OpenRouter serves with tool calling, the same tools and the same
+    # policy gate, no claude-mem. Chosen by OPENROUTER_API_KEY being set, and
+    # then `model` is an OpenRouter slug ("vendor/model"), not a Claude name.
+    backend: str = "claude"
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # What WebSearch asks on the OpenRouter backend: a model that searches the
+    # web itself and answers with its sources. Empty means no WebSearch.
+    openrouter_search_model: str = "perplexity/sonar"
+    # Photos sent in chat reach the model as images. Off for a model that
+    # takes no image input, or the provider refuses the whole request.
+    openrouter_images: bool = True
+    # Ceiling on one reply, tool calls included.
+    openrouter_max_tokens: int = 8192
+
     # -- the owner ---------------------------------------------------------
     # Who the assistant serves. IDENTITY.md, ROT.md and the skills say "the
     # owner" so the repository carries nobody's name; these two make it a
@@ -257,6 +275,15 @@ def load() -> Config:
     skills = os.environ.get("ASSISTANT_SKILLS", "").strip()
     cutover = os.environ.get("HRV_CUTOVER_DATE", "").strip()
     owner = os.environ.get("OWNER_NAME", "").strip()
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    model = os.environ.get("ASSISTANT_MODEL", "").strip()
+    if openrouter_key and "/" not in model:
+        # A Claude name here is the leftover default, and OpenRouter answers
+        # it with a 400 on every message. Say so once, at start.
+        raise SystemExit(
+            "OPENROUTER_API_KEY is set, so ASSISTANT_MODEL must be an OpenRouter "
+            f"model slug like vendor/model-name, got {model or 'nothing'!r}"
+        )
     try:
         hrv_cutover = date.fromisoformat(cutover) if cutover else None
     except ValueError:
@@ -291,7 +318,20 @@ def load() -> Config:
         ),
         bot_token=_require("TELEGRAM_BOT_TOKEN"),
         allowed_user_ids=frozenset(int(x) for x in ids.replace(" ", "").split(",") if x),
-        model=os.environ.get("ASSISTANT_MODEL", "claude-sonnet-5"),
+        model=model or "claude-sonnet-5",
+        backend="openrouter" if openrouter_key else "claude",
+        openrouter_api_key=openrouter_key,
+        openrouter_base_url=(
+            os.environ.get("OPENROUTER_BASE_URL", "").strip().rstrip("/")
+            or Config.openrouter_base_url
+        ),
+        openrouter_search_model=os.environ.get(
+            "OPENROUTER_SEARCH_MODEL", Config.openrouter_search_model
+        ).strip(),
+        openrouter_images=os.environ.get("OPENROUTER_IMAGES", "1").strip() != "0",
+        openrouter_max_tokens=int(
+            os.environ.get("OPENROUTER_MAX_TOKENS", "") or Config.openrouter_max_tokens
+        ),
         gws_bin=os.environ.get("GWS_BIN", "gws").strip(),
         drive_write_folders=tuple(
             f.strip() for f in write_folders.split(",") if f.strip()

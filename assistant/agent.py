@@ -25,15 +25,17 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     HookMatcher,
     ResultMessage,
+    SdkMcpTool,
     TextBlock,
+    create_sdk_mcp_server,
 )
 
 from .config import Config
-from .gws import Gws, build_server
 from .coach_report import ReportDesk
-from .intervals import Intervals, build_server as build_coach_server
+from .gws import Gws, build_tools as build_gws_tools
+from .intervals import Intervals, build_tools as build_coach_tools
 from .policy import Policy
-from .scrape import Scraper, build_server as build_scrape_server
+from .scrape import Scraper, build_tools as build_scrape_tools
 
 
 @dataclass(frozen=True)
@@ -99,59 +101,94 @@ Everything the machine reads stays English.
 log = logging.getLogger(__name__)
 
 
+@dataclass
+class Toolbox:
+    """The in-process tools, built once and shared by whichever brain runs.
+
+    `servers` maps a server name to its tools; the model sees each one as
+    mcp__<server>__<tool>, which is what assistant/policy.py pins. The Claude
+    brain wraps them in SDK MCP servers, the OpenRouter brain calls the
+    handlers itself -- the tools are the same objects either way.
+    """
+
+    servers: dict[str, list[SdkMcpTool]]
+    icu: Intervals
+    report_desk: ReportDesk
+
+
+def build_toolbox(config: Config) -> Toolbox:
+    servers: dict[str, list[SdkMcpTool]] = {}
+    # In-process, not a server process: the tools run inside this Python
+    # and shell out to `gws` with an argv list. The model never composes a
+    # command line, so there is nothing for injected text to extend.
+    # Empty GWS_BIN means the deployment has no Workspace access, and the
+    # tools are simply not offered -- better than offering three tools
+    # that fail once a morning. DRIVE_ALLOWED_FOLDERS goes in with it: the
+    # Drive tools see those folders and nothing else in the account, and
+    # DRIVE_WRITE_FOLDERS names which of them a new Doc may be created in,
+    # and whose Docs may be added to, corrected or rewritten. Empty, and
+    # writing at Drive is simply not available.
+    if config.gws_bin:
+        servers["gws"] = build_gws_tools(
+            Gws(config.gws_bin, config.gws_timeout_seconds),
+            config.drive_folder_ids,
+            config.drive_write_folders,
+        )
+    # The scraper worker, if this deployment runs one. Empty SCRAPER_URL
+    # means the three page tools are not offered at all, the same shape as
+    # gws above -- a price hunt then falls back to WebFetch and search,
+    # which is exactly what it did before the worker existed.
+    scraper = Scraper(
+        config.scraper_url,
+        config.scraper_token,
+        config.scraper_timeout_seconds,
+    )
+    if scraper.enabled:
+        servers["scrape"] = build_scrape_tools(scraper)
+    # Intervals.icu for the cycling coach. No key, no tools -- same shape
+    # again. The cache lives under state/, which the model cannot read, so
+    # a cached payload is reachable only through the coach tools.
+    icu = Intervals(
+        config.intervals_api_key,
+        config.intervals_athlete_id,
+        config.state_dir / "intervals",
+        hrv_cutover=config.hrv_cutover_date,
+    )
+    # The weekly routine files its report here; the transport lays it out.
+    desk = ReportDesk()
+    if icu.enabled:
+        servers["coach"] = build_coach_tools(icu, desk=desk)
+    return Toolbox(servers=servers, icu=icu, report_desk=desk)
+
+
+def make_brain(config: Config):
+    """The brain this deployment runs: Claude, or a model on OpenRouter.
+
+    Both answer the same four things -- ask, close, reap_idle, and the icu /
+    report_desk / routine_timeout_seconds the transport reads -- so nothing
+    above this line knows which one it got.
+    """
+    if config.backend == "openrouter":
+        from .openrouter import OpenRouterBrain
+
+        return OpenRouterBrain(config)
+    return Brain(config)
+
+
 class Brain:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._policy = Policy(
             config.root, config.web_fetch_domains, config.skills
         )
-        # In-process, not a server process: the tools run inside this Python
-        # and shell out to `gws` with an argv list. The model never composes a
-        # command line, so there is nothing for injected text to extend.
-        # Empty GWS_BIN means the deployment has no Workspace access, and the
-        # tools are simply not offered -- better than offering three tools
-        # that fail once a morning. DRIVE_ALLOWED_FOLDERS goes in with it: the
-        # Drive tools see those folders and nothing else in the account, and
-        # DRIVE_WRITE_FOLDERS names which of them a new Doc may be created in,
-        # and whose Docs may be added to, corrected or rewritten. Empty, and
-        # writing at Drive is simply not available.
-        self._gws = (
-            {"gws": build_server(
-                Gws(config.gws_bin, config.gws_timeout_seconds),
-                config.drive_folder_ids,
-                config.drive_write_folders,
-            )}
-            if config.gws_bin
-            else {}
-        )
-        # The scraper worker, if this deployment runs one. Empty SCRAPER_URL
-        # means the three page tools are not offered at all, the same shape as
-        # gws above -- a price hunt then falls back to WebFetch and search,
-        # which is exactly what it did before the worker existed.
-        scraper = Scraper(
-            config.scraper_url,
-            config.scraper_token,
-            config.scraper_timeout_seconds,
-        )
-        self._scrape = (
-            {"scrape": build_scrape_server(scraper)} if scraper.enabled else {}
-        )
-        # Intervals.icu for the cycling coach. No key, no tools -- same shape
-        # again. The cache lives under state/, which the model cannot read, so
-        # a cached payload is reachable only through the six tools.
-        icu = Intervals(
-            config.intervals_api_key,
-            config.intervals_athlete_id,
-            config.state_dir / "intervals",
-            hrv_cutover=config.hrv_cutover_date,
-        )
-        # The weekly routine files its report here; the transport lays it out.
-        self.report_desk = ReportDesk()
-        self._coach = (
-            {"coach": build_coach_server(icu, self.report_desk)} if icu.enabled else {}
-        )
+        toolbox = build_toolbox(config)
+        self._servers = {
+            name: create_sdk_mcp_server(name=name, version="1.0.0", tools=tools)
+            for name, tools in toolbox.servers.items()
+        }
+        self.report_desk = toolbox.report_desk
         # The transport draws routine charts from the same client and cache.
-        self.icu = icu
+        self.icu = toolbox.icu
         self.routine_timeout_seconds = config.routine_timeout_seconds
         self._client: ClaudeSDKClient | None = None
         self._session_id: str | None = None
@@ -191,7 +228,7 @@ class Brain:
             # shadow anything. Either way the PreToolUse gate below still
             # sees the call; see Policy._check_skill.
             skills=list(self._config.skills),
-            mcp_servers={**self._gws, **self._scrape, **self._coach},
+            mcp_servers=self._servers,
             # Empty by design -- see Config.allowed_tools. Permissions are
             # decided in one place: the PreToolUse hook below.
             allowed_tools=list(self._config.allowed_tools),
@@ -213,25 +250,7 @@ class Brain:
         """PreToolUse gate. Every tool call passes through here or not at all."""
         tool = payload.get("tool_name", "")
         tool_input = payload.get("tool_input") or {}
-        decision = self._policy.check(tool, tool_input)
-        # The address check applies to every tool that opens a URL, not just
-        # WebFetch. The scraper worker is the reason this matters more than it
-        # looks: it is a fetcher sitting inside the owner's own network, so a scrape
-        # call that skipped this check would hand the model a proxy onto the
-        # LAN and onto any metadata endpoint -- the gate would have seen only
-        # the worker's loopback address and approved it. The worker repeats the
-        # check itself, because routines never pass through here.
-        if decision.allow and tool_input.get("url") and (
-            tool == "WebFetch" or tool.startswith("mcp__scrape__")
-        ):
-            # DNS resolution blocks, so it goes off the event loop:
-            # Telegram's long poll must not stall on a slow lookup.
-            decision = await asyncio.to_thread(
-                self._policy.check_host, tool_input.get("url", "")
-            )
-        self._policy.record(tool, tool_input, decision)
-        if not decision.allow:
-            log.warning("blocked %s: %s", tool, decision.reason)
+        decision = await self._policy.decide(tool, tool_input)
         # Both branches must be explicit. Returning {} means "no opinion", which
         # falls through to the interactive permission prompt -- and no human is
         # attached to a Telegram bot, so an allowed write would hang until the

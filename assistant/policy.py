@@ -18,6 +18,7 @@ Adding a capability must be a deliberate edit here, not an oversight.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import re
@@ -342,6 +343,44 @@ class Policy:
         # Default deny. Bash lands here, and so does any tool added to the
         # model's toolset by a future SDK version that this policy predates.
         return Decision(False, f"tool '{tool}' is not permitted")
+
+    async def decide(self, tool: str, tool_input: dict) -> Decision:
+        """check(), the address check, and the audit row: the whole gate.
+
+        Both brains call this and nothing else -- the SDK's PreToolUse hook in
+        assistant/agent.py and the tool loop in assistant/openrouter.py -- so
+        a call is judged the same way whichever model is behind it.
+        """
+        decision = self.check(tool, tool_input)
+        # The address check applies to every tool that opens a URL, not just
+        # WebFetch. The scraper worker is the reason this matters more than it
+        # looks: it is a fetcher sitting inside the owner's own network, so a
+        # scrape call that skipped this check would hand the model a proxy onto
+        # the LAN and onto any metadata endpoint -- the gate would have seen
+        # only the worker's loopback address and approved it. The worker
+        # repeats the check itself, because routines never pass through here.
+        if decision.allow and tool_input.get("url") and (
+            tool == "WebFetch" or tool.startswith("mcp__scrape__")
+        ):
+            # DNS resolution blocks, so it goes off the event loop:
+            # Telegram's long poll must not stall on a slow lookup.
+            decision = await asyncio.to_thread(
+                self.check_host, tool_input.get("url", "")
+            )
+        self.record(tool, tool_input, decision)
+        if not decision.allow:
+            log.warning("blocked %s: %s", tool, decision.reason)
+        return decision
+
+    def readable(self, path: Path) -> bool:
+        """May a file turn up in a Glob or Grep that walks the tree?
+
+        The gate judges the directory a search starts from; this judges every
+        file the walk then reaches, so a Grep over the root does not read
+        .env on its way past.
+        """
+        path = Path(os.path.realpath(path))
+        return self._inside_root(path) and not self._is_secret(path)
 
     def _check_plan(self, tool_input: dict) -> Decision:
         """Preview in one turn, write in a later one, never in a routine."""

@@ -88,6 +88,9 @@ OPEN_DIRS = (".", ".claude")
 OPTION_ENV = {
     "claude_oauth_token": "CLAUDE_CODE_OAUTH_TOKEN",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "openrouter_api_key": "OPENROUTER_API_KEY",
+    "openrouter_search_model": "OPENROUTER_SEARCH_MODEL",
+    "openrouter_images": "OPENROUTER_IMAGES",
     "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
     "telegram_allowed_user_ids": "TELEGRAM_ALLOWED_USER_IDS",
     "model": "ASSISTANT_MODEL",
@@ -164,7 +167,8 @@ def build_env() -> dict[str, str]:
         "LC_ALL": "C.UTF-8",
         "TZ": os.environ.get("TZ", "UTC"),
     }
-    for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "TELEGRAM_BOT_TOKEN",
+    for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OPENROUTER_API_KEY",
+                 "TELEGRAM_BOT_TOKEN",
                  "TELEGRAM_ALLOWED_USER_IDS", "ASSISTANT_MODEL", "ASSISTANT_SKILLS"):
         if os.environ.get(name):
             env[name] = os.environ[name]
@@ -182,11 +186,22 @@ def build_env() -> dict[str, str]:
             "different credential types and the API key takes precedence, so "
             "leave exactly one of them filled in."
         )
-    if not env.get("ANTHROPIC_API_KEY") and not env.get("CLAUDE_CODE_OAUTH_TOKEN"):
+    claude = env.get("ANTHROPIC_API_KEY") or env.get("CLAUDE_CODE_OAUTH_TOKEN")
+    # The OpenRouter key picks the other brain outright (assistant/config.py),
+    # so a Claude credential beside it would sit unused and look like it
+    # mattered. One brain, one credential.
+    if claude and env.get("OPENROUTER_API_KEY"):
         raise SystemExit(
-            "no Anthropic credential. Fill in either claude_oauth_token "
-            "(`claude setup-token`, a subscription) or anthropic_api_key "
-            "(console.anthropic.com, metered)."
+            "both a Claude credential and openrouter_api_key are set. The "
+            "OpenRouter key switches the assistant to OpenRouter, so leave "
+            "exactly one kind filled in."
+        )
+    if not claude and not env.get("OPENROUTER_API_KEY"):
+        raise SystemExit(
+            "no model credential. Fill in claude_oauth_token "
+            "(`claude setup-token`, a subscription), anthropic_api_key "
+            "(console.anthropic.com, metered), or openrouter_api_key with an "
+            "OpenRouter slug in model."
         )
     # Checked here rather than left to assistant/config.py: _require() there
     # raises inside the supervised child, which would restart on a five second
