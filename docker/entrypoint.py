@@ -7,7 +7,8 @@ upgrade. So there are four jobs before the assistant can say a word:
   options   turn /data/options.json into the environment assistant/config.py
             expects, which on the VPS comes from the systemd EnvironmentFile
   seed      copy the image's code onto /data/paia, keeping every
-            directory that holds state (memory, routines, models, ...)
+            directory that holds state (memory, routines, models, ...), and
+            take in memory and routines dropped under the share's import/
   own       code owned by root and unwritable; state owned by `assistant`
   drop      run the assistant as `assistant`, never as root
 
@@ -316,6 +317,59 @@ def _seed_briefs() -> None:
     _sync(briefs, ROOT / "context", "context")
 
 
+# What the owner may hand in through the share. Everything else under import/
+# is left there and named in the log: code and identity come from the image,
+# briefs from context/, and the share is not a back door to either.
+IMPORTABLE = ("memory/wiki", "memory/raw", "routines")
+
+
+def import_state() -> None:
+    """Move an existing instance's memory and routines onto the volume, once.
+
+    /data is out of the share's reach on purpose, so a migration from a laptop
+    or the VPS lands in the config folder under import/ instead. Files overwrite
+    what is on the volume -- this is the owner replacing the empty skeleton --
+    and import/ is removed afterwards, so personal data does not stay on a
+    share anything on the LAN can read, and the next start does not import
+    the same snapshot over newer memory.
+
+    Only regular `.md` files are taken. A symlink is skipped: the share is
+    writable from outside, and one pointing at /data/options.json would copy
+    the tokens into the wiki, where the model reads.
+    """
+    inbox = CONFIG / "import"
+    if not inbox.is_dir() or inbox.is_symlink():
+        return
+    log(f"importing state from {inbox}")
+    for rel in IMPORTABLE:
+        src = inbox / rel
+        if not src.is_dir() or src.is_symlink():
+            continue
+        dst = ROOT / rel
+        dst.mkdir(parents=True, exist_ok=True)
+        count = 0
+        for child in sorted(src.iterdir()):
+            if child.is_symlink() or not child.is_file() or child.suffix != ".md" or child.name.startswith("."):
+                log(f"  skipped {child.relative_to(inbox)}")
+                continue
+            target = dst / child.name
+            if target.is_symlink() or target.is_dir():
+                log(f"  skipped {child.relative_to(inbox)}: target is not a file")
+                continue
+            shutil.copyfile(child, target)
+            count += 1
+        log(f"  {rel}: {count} files")
+    leftovers = sorted(
+        str(p.relative_to(inbox))
+        for p in inbox.rglob("*")
+        if p.is_file() and not any(p.relative_to(inbox).as_posix().startswith(r + "/") for r in IMPORTABLE)
+    )
+    for path in leftovers:
+        log(f"  dropped {path}: only {', '.join(IMPORTABLE)} are imported")
+    shutil.rmtree(inbox)
+    log(f"removed {inbox}")
+
+
 # -- ownership -------------------------------------------------------------
 
 
@@ -491,6 +545,8 @@ def main() -> int:
     account = pwd.getpwnam(USER)
 
     seed()
+    if CONFIG.is_dir():
+        import_state()
     own(account.pw_uid, account.pw_gid)
     install_claude_mem(env, account.pw_uid, account.pw_gid)
 

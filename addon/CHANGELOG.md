@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- One-shot import of an existing instance: memory/wiki, memory/raw and routines dropped under `import/` in the add-on config folder are moved into `/data/paia` on start, then `import/` is deleted.
+
 ## 0.3.1
 
 - OpenRouter options shown in the Configuration tab without the "unused optional" toggle.

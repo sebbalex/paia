@@ -93,7 +93,38 @@ python3 scripts/onboard.py --addon --root /Volumes/addon_configs/<hash>_paia
 ```
 
 The wiki lives in `/data`, out of reach of the share. You fill it by talking
-to the bot — see part 3 of `ONBOARDING.md`.
+to the bot — see part 3 of `ONBOARDING.md` — or bring it over from an
+instance you already run.
+
+### Moving an existing instance in
+
+Put its memory and routines under `import/` in the same config folder, then
+restart:
+
+```
+/addon_configs/<hash>_paia/
+  context/            your briefs, as above
+  import/
+    memory/wiki/      *.md
+    memory/raw/       *.md, optional: the verbatim history
+    routines/         *.md
+```
+
+```sh
+# from the old instance's root, with the SSH add-on (scp -O: it has no sftp)
+ssh root@homeassistant.local mkdir -p /addon_configs/<hash>_paia/import/memory
+scp -O -r memory/wiki memory/raw root@homeassistant.local:/addon_configs/<hash>_paia/import/memory/
+scp -O -r routines           root@homeassistant.local:/addon_configs/<hash>_paia/import/
+```
+
+On the next start the add-on copies them into `/data/paia`, overwriting the
+empty pages of the same name, and deletes `import/` — so your memory does not
+sit on a share, and a later restart does not import the old snapshot over
+newer memory. The Log tab lists what came in. Only `.md` files are taken;
+anything else under `import/`, a `context/` folder included, is dropped.
+Routines keep their `enabled` flag: if the old instance is still running, set
+them to `false` first, or both will deliver. Do it before your first chat, or
+your files replace what the bot has already written in those pages.
 
 `/data/options.json` holds your tokens and sits outside the assistant's root,
 so it is not readable by any tool the model has.
