@@ -1,9 +1,9 @@
 # Section 11, vendored
 
 Upstream: https://github.com/CrankAddict/section-11 (MIT, see `LICENSE.md`).
-Pinned at commit `2a33de0444b113f63ad36a9b8f427eb315c71a28` (2026-10-19),
-protocol version **11.77**. Copied unmodified; update by replacing the files
-from a newer commit and bumping the line above.
+Pinned at commit `2001e6a3b15a85c0ca06b2d47d6aaf826ee228b8` (2026-10-27),
+protocol version **11.100**. Copied unmodified; update with `scripts/update-section-11.sh [ref]`,
+which copies the files, bumps the line above and checks the cited headings.
 
 This is **reference**, not the method. The method is `../../SKILL.md`, which
 says where this assistant departs from the protocol. Where the two disagree,

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Coach: Section 11 protocol updated from 11.77 to 11.100 (reworked report templates, separate plan match and step compliance).
+
 ## 0.3.2
 
 - One-shot import of an existing instance: memory/wiki, memory/raw and routines dropped under `import/` in the add-on config folder are moved into `/data/paia` on start, then `import/` is deleted.

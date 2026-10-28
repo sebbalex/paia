@@ -130,7 +130,7 @@ Delete this section when no facts need confirmation. List only unresolved facts 
 | Birth year or age range | [Optional; prefer birth year so the file does not become stale annually] |
 | Sex | [Optional; include when relevant to health, medication, nutrition, or performance interpretation] |
 | Height | [Optional] |
-| Home region | [City/region/country; include only the precision useful for weather, terrain, travel, or altitude context] |
+| Home region | [City/region/country; include only the precision useful for weather, terrain, travel, or altitude context. For point weather, this is a fallback only when `athlete_profile.location` in current latest.json is null/empty; an explicit current-chat location takes priority. Label use as "(from dossier)"] |
 | Primary sport | [Sport and focus] |
 | Secondary sports/activities | [Optional] |
 | Occupation/lifestyle context | [Only stable facts that affect recovery, schedule, travel, or stress] |
