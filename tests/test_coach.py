@@ -593,9 +593,78 @@ def test_gate() -> None:
           policy.check("Read", {"file_path": str(root / "state/intervals/x.json")}).allow, False)
 
 
+def run(offset: int, **extra) -> dict:
+    base = {
+        "id": f"r{offset}", "type": "Run", "source": "GARMIN_CONNECT",
+        "start_date_local": f"{day(offset)}T07:00:00", "moving_time": 4200,
+        "distance": 12000, "icu_training_load": 70, "average_speed": 2.857,
+        "gap": 3.0, "threshold_pace": 4.0, "use_gap_zone_times": True,
+        "decoupling": 4.0, "average_heartrate": 148,
+        "gap_zone_times": [600, 3000, 300, 200, 100, 0, 0],
+        "pace_zone_times": [900, 2700, 300, 200, 100, 0, 0],
+    }
+    base.update(extra)
+    return base
+
+
+def test_running() -> None:
+    print("running")
+    check("pace string", m.pace_str(4.0), "4:10/km")
+    check("pace of nothing", m.pace_str(None), None)
+    zones = m.zone_paces(4.0, [77.5, 87.7, 999])
+    check("pace zone 1 open slow edge", zones[0], {"zone": "Z1", "slowest": None, "fastest": "5:23/km"})
+    check("pace zone top open fast edge", zones[2]["fastest"], None)
+
+    a = icu_mod.activity(run(0))
+    check("run sport family", a["sport"], "running")
+    check("run gap pace", a["pace"]["gap"], "5:33/km")
+    check("run gap as % of threshold", a["pace"]["pct_threshold"], 75)
+    check("run zones on gap", a["zones"]["basis"], "gap")
+    check("run zones on pace without gap setting",
+          icu_mod.activity(run(0, use_gap_zone_times=False))["zones"]["basis"], "pace")
+    check("run decoupling rough without power", a["hr"]["decoupling_read"]["readable"], "rough")
+    check("run without RPE asks", any("RPE" in x for x in a["missing_inputs"]), True)
+    nothr = icu_mod.activity(run(0, threshold_pace=None))
+    check("run without threshold pace named",
+          any("threshold pace" in x for x in nothr["missing_inputs"]), True)
+    check("ride has no pace block", icu_mod.activity(ride(0))["pace"], None)
+
+    reps = [{"type": "WORK", "group_id": "300s", "moving_time": 300, "start_time": i * 600,
+             "gap": v, "average_heartrate": 165 + i} for i, v in enumerate([4.2, 4.2, 4.1, 3.9, 3.9, 3.9])]
+    a = icu_mod.activity(run(0, icu_intervals=reps))
+    check("run main set on pace", a["main_set"]["pace_basis"], "gap")
+    check("run main set fade", a["main_set"]["pace_fade_pct"], -7.1)
+    check("run fade flagged", any("pace faded" in f for f in a["main_set"]["flags"]), True)
+
+    load = icu_mod.load(wellness_rows(), [ride(1), run(2)], TODAY)
+    check("running load split", (load["load_7d_cycling"], load["load_7d_running"]), (80, 70))
+    check("running monotony family", "running" in load["monotony_by_sport_7d"], True)
+    check("run row carries gap", icu_mod.sessions([run(1)])["sessions"][0]["pace_gap"], "5:33/km")
+    h = icu_mod.history([], [run(1), run(2)], 273)
+    check("history with no wellness rows", h["weeks"], [])
+
+    th = icu_mod.thresholds([
+        {"types": ["Ride"], "ftp": 273, "hr_zones": [140, 155, 196]},
+        {"types": ["Run", "TrailRun"], "lthr": 172, "hr_zones": [140, 155, 196],
+         "threshold_pace": 4.0, "pace_zones": [77.5, 87.7, 999]},
+        {"types": ["Hike"], "hr_zones": [120, 140, 190]},
+    ])
+    run_row = th["sports"][1]
+    check("threshold pace per km", run_row["threshold_pace_per_km"], "4:10/km")
+    check("pace zones per km", run_row["pace_zones_per_km"][1]["fastest"], "4:45/km")
+    check("copied ride HR zones flagged", run_row.get("hr_zones_copied_from_ride"), True)
+    check("own HR zones not flagged", "hr_zones_copied_from_ride" in th["sports"][2], False)
+    th = icu_mod.thresholds([{"types": ["Run"], "lthr": 172}])
+    check("run without threshold pace named", "threshold pace" in th["sports"][0]["missing"], True)
+
+    body = icu_mod.workout_body({"date": TODAY.isoformat(), "type": "Run", "name": "Soglia",
+                                 "description": "- 15m Z2 Pace\n- 20m 95-100% Pace"}, TODAY)
+    check("run is a plan type", body["type"], "Run")
+
+
 def main() -> int:
     for test in (test_hrv, test_rhr_sleep, test_load_metrics, test_decision, test_zones_tid,
-                 test_durability, test_shaping, test_session_analysis, test_client, test_tools, test_plan_workout, test_gate):
+                 test_durability, test_shaping, test_session_analysis, test_running, test_client, test_tools, test_plan_workout, test_gate):
         test()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED:")

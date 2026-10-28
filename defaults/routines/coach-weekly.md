@@ -30,10 +30,10 @@ repeat them — write what they mean.
 - `headline`: the week's verdict in one line.
 - `summary`: two or three sentences, done against planned and what it means.
 - `highlights`: up to four lines, the sessions or signals that mattered, each
-  with the one number that proves it. Easy rides only if something happened.
+  with the one number that proves it. Easy rides and runs only if something happened.
 - `next_week`: every day with something on it — title, minutes, and a
-  purpose with the targets that matter, watts from `coach_thresholds` on the
-  base the skill says. Mark the two key sessions `key`. For a key ride not in
+  purpose with the targets that matter, watts or paces from `coach_thresholds` on the
+  base the skill says. Mark the two key sessions `key`. For a key session not in
   the calendar yet, put its steps in `workout` in Intervals.icu syntax exactly
   as `coach_plan_workout` takes them (`- 9m30s 55-75%`, `- 30s 330-350w`, a
   line `Set 1 8x` before a repeat, a blank line after it): it is drawn as a

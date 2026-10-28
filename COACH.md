@@ -294,7 +294,7 @@ Every coach answer that makes a recommendation includes (hidden or collapsed) me
 
 ### 6.3 Onboarding (`/onboarding`) collects
 
-Age, weight, years riding, current FTP / power zones, LTHR / max HR per sport, typical weekly availability, goal(s), constraints (family, work, weather), injuries. Store as athlete dossier (Section 11 `DOSSIER_TEMPLATE.md` as base).
+Age, weight, years training per sport, current FTP / power zones, LTHR / max HR per sport, typical weekly availability, goal(s), constraints (family, work, weather), injuries. Store as athlete dossier (Section 11 `DOSSIER_TEMPLATE.md` as base).
 
 ### 6.4 Writing workouts to the Edge
 

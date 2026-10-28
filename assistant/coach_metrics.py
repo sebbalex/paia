@@ -1,6 +1,6 @@
 """The coach's arithmetic. Pure functions, no I/O, no clock.
 
-Everything the cycling coach reasons over is computed here and handed to the
+Everything the endurance coach reasons over is computed here and handed to the
 model as finished numbers. That is the "no virtual math" rule from Section 11
 (CrankAddict, v11.77): a model asked to average seven HRV values will produce a
 plausible number, and plausible is not the same as right. These functions are
@@ -480,16 +480,24 @@ FUEL_BANDS = ((75, 0, 30), (150, 30, 60), (10_000, 60, 90))
 # Rep fade beyond this, first third of the set to last, means the target was
 # above what he could hold that day (Section 11 VO2-1: stop beyond 5 %).
 REP_FADE_PCT = 5.0
+# Pace varies less than power rep to rep: 3 % slower is a real fade on a run.
+RUN_REP_FADE_PCT = 3.0
 
 
 def decoupling_read(
-    decoupling: float | None, vi: float | None, moving_secs: float | None
+    decoupling: float | None, vi: float | None, moving_secs: float | None,
+    *, run: bool = False,
 ) -> dict[str, Any]:
-    """Whether a ride's whole-ride Pa:HR decoupling means anything."""
+    """Whether a session's whole-session Pa:HR decoupling means anything."""
     if decoupling is None:
-        return {"readable": "absent", "why": "no decoupling (no power or no HR)"}
+        return {"readable": "absent", "why": "no decoupling (no power or pace, or no HR)"}
     if (moving_secs or 0) < DECOUPLING_MIN_SECS:
         return {"readable": "no", "why": "under 60 min: too short to show drift"}
+    if run and vi is None:
+        # A run without power has no variability index to say it was steady:
+        # pace on hills, stops and surges all move the number.
+        return {"readable": "rough", "why": "run without power: pace:HR, steadiness "
+                "unknown; trust it on flat, even runs only, trend only"}
     if vi is None:
         return {"readable": "no", "why": "variability index unknown"}
     if vi <= DURABILITY_MAX_VI:
@@ -578,6 +586,87 @@ def interval_set(intervals: Iterable[dict[str, Any]], ftp: float | None) -> dict
                 "hr_max": i.get("max_heartrate"),
                 "rpm": round(i["average_cadence"]) if i.get("average_cadence") else None,
                 "w_bal_end_j": i.get("wbal_end"),
+            }
+            for i in reps[:30]
+        ],
+        "flags": flags,
+    }
+
+
+def pace_str(speed_ms: float | None) -> str | None:
+    """m/s to 'm:ss/km'. Intervals.icu keeps every pace as a speed in m/s."""
+    if not speed_ms or speed_ms <= 0:
+        return None
+    secs = round(1000 / speed_ms)
+    return f"{secs // 60}:{secs % 60:02d}/km"
+
+
+def zone_paces(threshold_ms: float | None, upper_pcts: Sequence[float] | None) -> list[dict[str, Any]] | None:
+    """Intervals.icu stores pace zones as upper bounds in % of threshold
+    speed, so a higher zone is faster. Each zone as min/km, slow edge first."""
+    if not threshold_ms or not upper_pcts:
+        return None
+    out, low = [], None
+    for n, pct in enumerate(upper_pcts, start=1):
+        high = None if pct >= 999 else threshold_ms * pct / 100
+        out.append({"zone": f"Z{n}", "slowest": pace_str(low), "fastest": pace_str(high)})
+        low = high
+    return out
+
+
+def run_interval_set(intervals: Iterable[dict[str, Any]], threshold_ms: float | None) -> dict[str, Any] | None:
+    """The main set of a structured run without power, judged on pace.
+
+    Same grouping as interval_set; grade-adjusted speed where Intervals gives
+    it, so a rep uphill is not read as a slow one. Fade is speed lost from the
+    first to the last third, negative meaning slower.
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for iv in intervals:
+        if iv.get("type") != "WORK" or not iv.get("group_id"):
+            continue
+        if not (iv.get("gap") or iv.get("average_speed")) or (iv.get("moving_time") or 0) < 10:
+            continue
+        groups.setdefault(str(iv["group_id"]), []).append(iv)
+    sets = [g for g in groups.values() if len(g) >= 2]
+    if not sets:
+        return None
+    reps = sorted(max(sets, key=lambda g: sum(i["moving_time"] for i in g)),
+                  key=lambda i: i.get("start_time") or 0)
+    speed = [float(i.get("gap") or i["average_speed"]) for i in reps]
+    hrs = [float(i["average_heartrate"]) for i in reps if i.get("average_heartrate")]
+    k = _third(speed)
+    first, last = statistics.fmean(speed[:k]), statistics.fmean(speed[-k:])
+    fade = round((last - first) / first * 100, 1) if first else None
+    hr_rise = None
+    if len(hrs) == len(reps):
+        hr_rise = round(statistics.fmean(hrs[-k:]) - statistics.fmean(hrs[:k]), 1)
+    mean_v = statistics.fmean(speed)
+    cv = round(statistics.pstdev(speed) / mean_v * 100, 1) if mean_v else None
+    secs = [i["moving_time"] for i in reps]
+    flags = []
+    if fade is not None and fade < -RUN_REP_FADE_PCT:
+        flags.append(f"pace faded {fade}% from first to last third of the set")
+    if hr_rise is not None and fade is not None and hr_rise >= 8 and fade > -2:
+        flags.append("HR climbed across reps at held pace: expected late in a hard set")
+    if cv is not None and cv > 4:
+        flags.append(f"reps uneven (CV {cv}%): pacing or terrain")
+    return {
+        "reps": len(reps),
+        "rep_secs_median": statistics.median(secs),
+        "work_min": round(sum(secs) / 60, 1),
+        "mean_pace": pace_str(mean_v),
+        "pace_basis": "gap" if all(i.get("gap") for i in reps) else "actual",
+        "mean_pct_threshold": round(mean_v / threshold_ms * 100) if threshold_ms else None,
+        "pace_fade_pct": fade,
+        "hr_rise_bpm": hr_rise,
+        "pace_cv_pct": cv,
+        "rep_detail": [
+            {
+                "secs": i["moving_time"],
+                "pace": pace_str(i.get("gap") or i["average_speed"]),
+                "hr": i.get("average_heartrate"),
+                "hr_max": i.get("max_heartrate"),
             }
             for i in reps[:30]
         ],

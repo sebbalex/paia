@@ -490,16 +490,17 @@ def interview(env: dict[str, str], briefs: Briefs, addon: bool) -> tuple[dict[st
 
 
 _TRAINING = [
-    ("discipline and sessions a week", "Discipline and sessions a week", "e.g. road, 4"),
-    ("age, weight, years riding", "Age, weight, years riding", "e.g. 42, 74 kg, 8 years"),
+    ("sports and sessions a week", "Sports and sessions a week", "e.g. road cycling 3, running 2"),
+    ("main sport", "Main sport, the one that wins a clash", "or equal"),
+    ("age, weight, years training", "Age, weight, years training each sport", "e.g. 42, 74 kg, 8 years bike, 3 run"),
     ("injuries and niggles", "Injuries or niggles to train around", "none, if none"),
-    ("typical week", "Typical week", "e.g. 1 h on weekdays, long ride at the weekend"),
-    ("training mode", "Training mode", "bike only, or bike plus gym"),
-    ("fixed constraints", "Fixed constraints", "work, family, weather, commute"),
+    ("typical week", "Typical week", "e.g. 1 h on weekdays, long ride Sat, long run Sun"),
+    ("strength and other training", "Strength and other training", "none, or e.g. gym twice a week"),
+    ("fixed constraints", "Fixed constraints", "work, family, weather, commute, terrain"),
     ("event and date", "Goal event and date", "e.g. Maratona dles Dolomites, 2027-07-04"),
-    ("distance, elevation and target", "Its distance, elevation and your target", "e.g. 138 km, 4230 m D+, finish"),
-    ("devices", "Devices", "head unit, power meter, HR strap, watch"),
-    ("Pre-ride reminder", "Pre-ride reminder", "e.g. zero-offset the power meter"),
+    ("sport, distance, elevation and target", "Its sport, distance, elevation and your target", "e.g. trail run, 42 km, 2500 m D+, under 6 h"),
+    ("devices", "Devices", "watch, HR strap, head unit, power meter, footpod"),
+    ("Pre-session reminder", "Pre-session reminder", "e.g. zero-offset the power meter"),
 ]
 
 

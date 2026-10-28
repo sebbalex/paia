@@ -13,8 +13,8 @@ mixed, or extrapolated from another sport or level; **practice** = what good
 coaches do, without a trial behind it.
 
 Most of these studies are on trained or elite athletes, often young men.
-The owner is an amateur of 42 with ~6–9 h a week. Direction of effect transfers
-well; exact magnitudes do not. Say so when it matters.
+The owner is an amateur (age and hours in the brief). Direction of effect
+transfers well; exact magnitudes do not. Say so when it matters.
 
 ## Intensity distribution
 
@@ -144,3 +144,41 @@ well; exact magnitudes do not. Say so when it matters.
   on steep climbs lower. **Moderate.** Impellizzeri & Marcora 2007, Sports
   Med. Consequence for an MTB marathon goal: long climbing durability plus repeated
   surges, and time on the MTB for skill, not only road power.
+
+## Running
+
+- Running-related injuries are common: per 1,000 h of running, novices get
+  injured roughly twice as often as recreational runners. **Moderate**
+  (systematic review). Videbæk et al. 2015, Sports Med. Consequence: a fit
+  cyclist starting to run is a novice runner, whatever their CTL.
+- Novice runners who raised weekly distance by more than ~30 % over two weeks
+  had more distance-related injuries than those who raised it by less than
+  10 %. **Moderate** (prospective cohort). Nielsen et al. 2014, J Orthop
+  Sports Phys Ther.
+- But a slower, "10 % rule" build alone did not cut injuries against a
+  standard programme in novices. **Moderate** (RCT). Buist et al. 2008, Am J
+  Sports Med. Consequence: cap the spikes, and watch the niggles; a slow ramp
+  is necessary, not sufficient.
+- Strength training (heavy and plyometric) improves running economy in
+  middle- and long-distance runners. **Moderate–strong** (systematic review).
+  Blagrove, Howatson & Hayes 2018, Sports Med; review of economy Barnes &
+  Kilding 2015, Sports Med.
+- Strength training reduces sports injuries; stretching does not. **Strong**
+  (meta-analysis). Lauersen, Bertelsen & Andersen 2014, Br J Sports Med.
+- Recreational runners on a polarised distribution improved 10 km time more
+  than on a threshold-heavy one. **Moderate** (one trial, small). Muñoz et
+  al. 2014, Int J Sports Physiol Perform.
+- Intervals at or near the speed of VO2max (≈ 3–5 min reps) are the most
+  direct way to raise VO2max in runners. **Moderate** (review). Midgley,
+  McNaughton & Jones 2007, Sports Med; Billat 2001, Sports Med.
+- Downhill running causes far more eccentric muscle damage and soreness than
+  level or uphill running at the same effort. **Moderate**. Eston,
+  Mickleborough & Baltzopoulos 1995, Br J Sports Med. Consequence: on trail,
+  descents are load the HR does not show.
+- Gastrointestinal complaints are more common in running than in cycling,
+  and rise with intensity and duration; practised intake reduces them.
+  **Moderate** (review). de Oliveira, Burini & Jeukendrup 2014, Sports Med.
+- Cycling fitness transfers only partly to running: the heart and lungs
+  carry over, the legs' tolerance to impact does not. **Weak / practice**,
+  consistent with the specificity principle and the injury data above.
+- Strides, hill sprints and walk breaks for returning runners: **practice**.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4
+
+- Coach covers running as well as cycling: run pace, grade-adjusted pace and pace zones, per-sport load, run thresholds, a running workout library and multi-sport planning. Existing installs: compare your context/training-rules.md with the new default.
+
 ## 0.3.3
 
 - Coach: Section 11 protocol updated from 11.77 to 11.100 (reworked report templates, separate plan match and step compliance).

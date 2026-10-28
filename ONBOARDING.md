@@ -98,7 +98,7 @@ about rather than guessing.
 | Skills | each method in `.claude/skills/`, on or off | `ASSISTANT_SKILLS` |
 | Google | `gws` path, each calendar: show / background / ignore, mail address, trip folder and whether it is writable, other readable folders | `GWS_BIN`, `context/calendar-rules.md`, `memory/wiki/calendar.md`, `MAIL_TO`, `context/adventures-rules.md`, `DRIVE_ALLOWED_FOLDERS`, `DRIVE_WRITE_FOLDERS` |
 | Shopping | ship-to country and acceptable sellers | `context/shopping-rules.md` |
-| Coach | Intervals key and athlete id, HRV cutover; discipline, age/weight/years, injuries, typical week, gym or not, constraints, goal event, its distance and target, devices, pre-ride reminder | `INTERVALS_*`, `HRV_CUTOVER_DATE`, `context/training-rules.md` |
+| Coach | Intervals key and athlete id, HRV cutover; sports and sessions, main sport, age/weight/years, injuries, typical week, strength work, constraints, goal event, its sport, distance and target, devices, pre-session reminder | `INTERVALS_*`, `HRV_CUTOVER_DATE`, `context/training-rules.md` |
 | Scraper | URL | `SCRAPER_URL`, `SCRAPER_TOKEN` (generated) |
 | Voice | Whisper model, forced language | `WHISPER_MODEL`, `WHISPER_LANGUAGE` |
 

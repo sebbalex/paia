@@ -18,7 +18,7 @@ Eight reads and one write:
     coach_week        planned vs executed for one ISO week
     coach_history     weekly CTL / eFTP / load / HRV / Pw:HR over months
     coach_power_curve best power 5 s to 60 min, recent against the season
-    coach_thresholds  FTP, zones in watts, LTHR and max HR per sport
+    coach_thresholds  FTP, zones in watts, threshold pace, LTHR, max HR per sport
     coach_plan_workout  put one planned workout on the Intervals.icu calendar,
                       or rewrite one this assistant put there
 
@@ -90,14 +90,15 @@ _RIDE_TYPES = frozenset({
     "Ride", "VirtualRide", "MountainBikeRide", "GravelRide", "TrackRide",
     "Cyclocross", "EBikeRide", "EMountainBikeRide",
 })
+_RUN_TYPES = frozenset({"Run", "VirtualRun", "TrailRun"})
 _GYM_TYPES = frozenset({"WeightTraining", "Workout", "Crossfit", "Yoga", "Pilates"})
 
 _ACTIVITY_ID = re.compile(r"\A[A-Za-z0-9_-]{1,40}\Z")
 _EVENT_ID = re.compile(r"\A\d{1,15}\Z")
 
-# What a planned workout may be. Rides are the point; gym and hikes are
-# planned too, and nothing else has a session the coach prescribes.
-_PLAN_TYPES = _RIDE_TYPES | frozenset({"WeightTraining", "Hike", "Walk"})
+# What a planned workout may be: rides and runs are the point; gym and hikes
+# are planned too, and nothing else has a session the coach prescribes.
+_PLAN_TYPES = _RIDE_TYPES | _RUN_TYPES | frozenset({"WeightTraining", "Hike", "Walk"})
 # Far enough for next week's plan written on a Sunday, not a season.
 _PLAN_AHEAD_DAYS = 28
 _PLAN_NAME_MAX = 80
@@ -516,23 +517,35 @@ def readiness(rows: list[dict[str, Any]], today: date, cutover: date | None) -> 
     }
 
 
+def _family(a: dict[str, Any]) -> str:
+    t = a.get("type")
+    return "cycling" if t in _RIDE_TYPES else "running" if t in _RUN_TYPES else "other"
+
+
 def _daily_by_sport(acts: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
-    out: dict[str, dict[str, float]] = {"cycling": {}, "other": {}}
+    out: dict[str, dict[str, float]] = {"cycling": {}, "running": {}, "other": {}}
     for a in acts:
         load = a.get("icu_training_load")
         if load is None:
             continue
-        family = "cycling" if a.get("type") in _RIDE_TYPES else "other"
+        family = _family(a)
         day = _day(a)
         out[family][day] = out[family].get(day, 0.0) + float(load)
     return out
 
 
 def _zone_secs(a: dict[str, Any]) -> tuple[list[float] | None, str | None]:
-    """Power zones preferred, HR as fallback (Section 11 zone preference)."""
+    """Power zones preferred, then pace on a run, HR as fallback (Section 11
+    zone preference). A run's pace zones are grade-adjusted when the athlete's
+    run settings say so (`use_gap_zone_times`), as Intervals itself shows them."""
     secs = m.zone_seconds(a.get("icu_zone_times"))
     if secs and sum(secs) > 0:
         return secs, "power"
+    if a.get("type") in _RUN_TYPES:
+        gap = bool(a.get("use_gap_zone_times"))
+        secs = m.zone_seconds(a.get("gap_zone_times" if gap else "pace_zone_times"))
+        if secs and sum(secs) > 0:
+            return secs, "gap" if gap else "pace"
     secs = m.zone_seconds(a.get("icu_hr_zone_times"))
     if secs and sum(secs) > 0:
         return secs, "hr"
@@ -576,6 +589,7 @@ def load(
             "durability below cover only the visible ones"
         )
     cycling7 = sum(week(by_sport["cycling"])) if not hidden else None
+    running7 = sum(week(by_sport["running"])) if not hidden else None
     return {
         "date": key,
         "as_of": latest.get("id"),
@@ -591,12 +605,14 @@ def load(
         },
         "load_7d_total": round(sum(last7), 0),
         "load_7d_cycling": round(cycling7, 0) if cycling7 is not None else None,
+        "load_7d_running": round(running7, 0) if running7 is not None else None,
         "monotony_total_7d": m.monotony(last7),
         "monotony_by_sport_7d": {
             fam: m.monotony(week(series)) for fam, series in by_sport.items() if series
         },
         "tid_7d": _tid(in7),
         "tid_28d": _tid(visible),
+        # Rides only: it gates on the variability index, which needs power.
         "durability": m.durability(visible, today),
         "activities_28d": {"visible": len(visible), "hidden_strava": hidden},
         "missing_inputs": missing,
@@ -605,6 +621,21 @@ def load(
 
 def _r(value: Any, digits: int = 1) -> Any:
     return round(value, digits) if isinstance(value, (int, float)) else value
+
+
+def _run_pace(a: dict[str, Any]) -> dict[str, Any]:
+    """A run's pace, as min/km strings. Intervals keeps speeds in m/s."""
+    threshold = a.get("threshold_pace")
+    gap = a.get("gap")
+    return {
+        "avg": m.pace_str(a.get("average_speed") or a.get("pace")),
+        "gap": m.pace_str(gap),
+        "pct_threshold": round(gap / threshold * 100) if gap and threshold else None,
+        "threshold_used": m.pace_str(threshold),
+        "stride_m": _r(a.get("average_stride"), 2),
+        "note": "gap is grade-adjusted pace: on hills read it, not avg. "
+                "pct_threshold is speed as % of threshold speed, so above 100 is faster",
+    }
 
 
 def activity(a: dict[str, Any]) -> dict[str, Any]:
@@ -635,7 +666,12 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         missing.append("no power on this ride: HR-only, so intensity and load are estimates")
     if a.get("type") in _RIDE_TYPES and rpe is None:
         missing.append("RPE and feel not logged in Intervals.icu -- ask how it felt")
-    if moving > 75 * 60 and a.get("carbs_ingested") is None and a.get("type") in _RIDE_TYPES:
+    run = a.get("type") in _RUN_TYPES
+    if run and rpe is None:
+        missing.append("RPE and feel not logged in Intervals.icu -- ask how it felt")
+    if run and not a.get("threshold_pace"):
+        missing.append("no threshold pace on this run: pace zones and intensity are unknown, HR is the only gauge")
+    if moving > 75 * 60 and a.get("carbs_ingested") is None and (a.get("type") in _RIDE_TYPES or run):
         missing.append("carbs eaten not logged: fuelling can only be compared to the guideline")
     dfa = [s for s in (a.get("stream_types") or []) if "dfa" in str(s).lower() or "alpha" in str(s).lower()]
     return {
@@ -648,6 +684,8 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         "moving_min": round(moving / 60, 1) if moving else None,
         "distance_km": _r((a.get("distance") or 0) / 1000) if a.get("distance") else None,
         "elevation_m": _r(a.get("total_elevation_gain"), 0),
+        "sport": _family(a),
+        "pace": _run_pace(a) if run else None,
         "power": {
             "avg_w": _r(a.get("icu_average_watts"), 0),
             "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
@@ -663,7 +701,7 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
             "max": a.get("max_heartrate"),
             "decoupling_pct": _r(a.get("decoupling")),
             "decoupling_read": m.decoupling_read(
-                a.get("decoupling"), a.get("icu_variability_index"), moving
+                a.get("decoupling"), a.get("icu_variability_index"), moving, run=run
             ),
             "hrrc_bpm": a.get("icu_hrr"),
             "zone_minutes": [round(x / 60, 1) for x in hr_secs] if hr_secs else None,
@@ -690,7 +728,11 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
                     "a hard 3-20 min effort cannot raise it",
         },
         "interval_summary": a.get("interval_summary"),
-        "main_set": m.interval_set(a.get("icu_intervals") or [], ftp),
+        "main_set": (
+            m.run_interval_set(a.get("icu_intervals") or [], a.get("threshold_pace"))
+            if run and not a.get("icu_average_watts")
+            else m.interval_set(a.get("icu_intervals") or [], ftp)
+        ),
         "warmup_min": round(a["icu_warmup_time"] / 60) if a.get("icu_warmup_time") else None,
         "fuel": m.fuel(moving, a.get("carbs_used"), a.get("carbs_ingested")),
         "cadence_avg": _r(a.get("average_cadence"), 0),
@@ -735,6 +777,7 @@ def sessions(acts: list[dict[str, Any]]) -> dict[str, Any]:
             "moving_min": round(moving / 60),
             "load": a.get("icu_training_load"),
             "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
+            "pace_gap": m.pace_str(a.get("gap")) if a.get("type") in _RUN_TYPES else None,
             "if_pct": _r(a.get("icu_intensity"), 0),
             "vi": _r(a.get("icu_variability_index"), 2),
             "hr_avg": a.get("average_heartrate"),
@@ -742,7 +785,8 @@ def sessions(acts: list[dict[str, Any]]) -> dict[str, Any]:
             "power_hr_z2": _r(a.get("icu_power_hr_z2"), 2),
             "decoupling_pct": _r(a.get("decoupling")),
             "decoupling_readable": m.decoupling_read(
-                a.get("decoupling"), a.get("icu_variability_index"), moving
+                a.get("decoupling"), a.get("icu_variability_index"), moving,
+                run=a.get("type") in _RUN_TYPES,
             )["readable"],
             "zones_basis": basis,
             "easy_grey_quality_pct": (
@@ -878,11 +922,19 @@ def history(
     ef: dict[str, list[float]] = {}
     pwhr: dict[str, list[float]] = {}
     ride_h: dict[str, float] = {}
+    run_h: dict[str, float] = {}
+    run_km: dict[str, float] = {}
     for a in acts:
-        if is_stub(a) or a.get("type") not in _RIDE_TYPES:
+        if is_stub(a):
             continue
         y, w, _ = date.fromisoformat(_day(a)).isocalendar()
         key = f"{y}-W{w:02d}"
+        if a.get("type") in _RUN_TYPES:
+            run_h[key] = run_h.get(key, 0.0) + (a.get("moving_time") or 0) / 3600
+            run_km[key] = run_km.get(key, 0.0) + (a.get("distance") or 0) / 1000
+            continue
+        if a.get("type") not in _RIDE_TYPES:
+            continue
         ride_h[key] = ride_h.get(key, 0.0) + (a.get("moving_time") or 0) / 3600
         if a.get("icu_efficiency_factor"):
             ef.setdefault(key, []).append(float(a["icu_efficiency_factor"]))
@@ -909,6 +961,8 @@ def history(
                 "ef_rides_mean": mean(ef.get(k, []), 2),
                 "power_hr_z2_mean": mean(pwhr.get(k, []), 2),
                 "ride_hours_visible": round(ride_h.get(k, 0.0), 1),
+                "run_hours_visible": round(run_h.get(k, 0.0), 1),
+                "run_km_visible": round(run_km.get(k, 0.0), 1),
             }
             for k, v in weeks.items()
         ],
@@ -945,14 +999,28 @@ def thresholds(settings: list[dict[str, Any]], eftp: float | None = None) -> dic
                     round(base * s["sweet_spot_min"] / 100),
                     round(base * s["sweet_spot_max"] / 100),
                 ]
+        if s.get("threshold_pace"):
+            row["threshold_pace_per_km"] = m.pace_str(s["threshold_pace"])
+            paces = m.zone_paces(s["threshold_pace"], s.get("pace_zones"))
+            if paces:
+                row["pace_zones_per_km"] = paces
+        elif _RUN_TYPES & set(s.get("types") or []):
+            row["missing"] = "no threshold pace set: run sessions can be prescribed by HR only"
         out.append(row)
+    ride = next((r for r in out if "Ride" in (r.get("types") or [])), {})
+    for r in out:
+        if r is not ride and r.get("hr_zones") and r.get("hr_zones") == ride.get("hr_zones"):
+            r["hr_zones_copied_from_ride"] = True
     return {
         "sports": out,
         "note": "power_zones are % of FTP and hr_zones are bpm upper bounds, "
                 "as Intervals.icu stores them; power_zones_watts are those % "
                 "applied to the FTP set here, and the _eftp variants the "
                 "same % applied to the latest eFTP. Prescribe targets from "
-                "these; if they disagree by > 5 % say which one you used",
+                "these; if they disagree by > 5 % say which one you used. "
+                "pace_zones_per_km are the run pace zones as min/km ranges, "
+                "slowest first. hr_zones_copied_from_ride means that sport "
+                "inherited the bike's HR zones: say so, its own LTHR is unknown",
     }
 
 
@@ -1120,8 +1188,8 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
     @tool(
         "coach_load",
         "Training load as of one day (default today): CTL, ATL, TSB, ramp "
-        "rate, eFTP, 7-day load total and cycling-only, Foster monotony "
-        "overall and per sport family, Seiler TID 7d vs 28d with polarization "
+        "rate, eFTP, 7-day load total, cycling-only and running-only, Foster "
+        "monotony overall and per sport family (cycling, running, other), Seiler TID 7d vs 28d with polarization "
         "index and grey-zone %, aggregate durability (decoupling of long "
         "steady rides, 7d vs 28d, with its reliability gate), and ACWR -- "
         "which is load context only, never a reason on its own to change a "
@@ -1143,12 +1211,13 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
 
     @tool(
         "coach_activity",
-        "One activity in the detail a post-ride analysis needs: duration, "
-        "distance, avg/NP power, intensity, VI, EF, L/R balance, HR and "
+        "One activity in the detail a post-session analysis needs: duration, "
+        "distance, for a run its pace, grade-adjusted pace and % of threshold, "
+        "avg/NP power, intensity, VI, EF, L/R balance, HR and "
         "decoupling with whether it can be read on this ride, Pw:HR in Z2, "
         "cadence, kJ and work above FTP, W' depletion, load, power and HR zone "
-        "minutes with Seiler TID, the main interval set rep by rep with power "
-        "fade and HR creep, fuelling against the guideline, RPE and feel, and "
+        "minutes (pace zones on a run without power) with Seiler TID, the main "
+        "interval set rep by rep with power -- or on a run pace -- fade and HR creep, fuelling against the guideline, RPE and feel, and "
         "the planned workout it was paired with. Get the id from "
         "coach_sessions or coach_week. A Strava-synced activity comes back "
         "marked hidden. Read-only.",
@@ -1168,7 +1237,7 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
     @tool(
         "coach_sessions",
         "Every visible session of the last N days (default 28, 7 to 56), "
-        "newest first, one compact row each: type, minutes, load, NP, IF, VI, "
+        "newest first, one compact row each: type, minutes, load, NP, run GAP, IF, VI, "
         "HR, EF, Pw:HR Z2, decoupling and whether it is readable, "
         "easy/grey/quality split, climbing, RPE, feel. For patterns across "
         "sessions and for finding the id of one to open with coach_activity. "
@@ -1190,7 +1259,7 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
 
     @tool(
         "coach_power_curve",
-        "Best ride power at 5 s, 1 min, 5 min, 20 min and 60 min over the "
+        "Cycling only. Best ride power at 5 s, 1 min, 5 min, 20 min and 60 min over the "
         "last 42 days, 84 days and year, with W/kg and the 42-day figure as % "
         "of the year's best. Shows where they are strong and what has been lost "
         "or never trained. Read-only.",
@@ -1239,6 +1308,7 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         "Weekly trend over the last N days (default 182, max 365): CTL and "
         "ATL at week end, weekly load, eFTP, mean HRV, RHR and sleep, and "
         "mean efficiency factor and Pw:HR in Z2 of visible rides, ride hours, "
+        "run hours and km, "
         "plus the FTP set in Intervals.icu. For block reviews and 'am I "
         "getting fitter'. Read-only.",
         {"days": Annotated[int, "How far back, 28 to 365. Default 182."]},
@@ -1267,10 +1337,11 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
     @tool(
         "coach_thresholds",
         "The thresholds set in Intervals.icu for each sport: FTP, W', LTHR, "
-        "max HR, power and HR zones, and the power zones and sweet spot in "
-        "watts -- the numbers a prescribed session's targets come from. "
-        "Cycling and hiking must have their own; if hiking inherits "
-        "cycling's HR settings, say so. Read-only.",
+        "max HR, power and HR zones, the power zones and sweet spot in "
+        "watts, and for running the threshold pace and pace zones in min/km "
+        "-- the numbers a prescribed session's targets come from. Every "
+        "sport must have its own; if one inherits cycling's HR settings, say "
+        "so. Read-only.",
         {},
     )
     async def coach_thresholds(args: dict[str, Any]) -> dict[str, Any]:
@@ -1297,8 +1368,10 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         "matching preview, and any write from a routine. description is "
         "Intervals.icu workout syntax, one step per line starting '- ' "
         "('- 15m 55%', '- 8m 88-94%', a line 'Main set 4x' before a repeat "
-        "block, blank lines between blocks); targets in % of FTP (or in "
-        "watts like '330-350w'). The answer says whether Intervals parsed it "
+        "block, blank lines between blocks); ride targets in % of FTP (or in "
+        "watts like '330-350w'); run targets in % of threshold pace "
+        "('- 10m 78-88% Pace'), pace zones ('- 20m Z2 Pace') or HR "
+        "('- 30m Z2 HR'), steps written in time, not distance. The answer says whether Intervals parsed it "
         "into steps; if not, it reaches Garmin unstructured -- say so. To "
         "change a workout this assistant planned, pass its event_id (from "
         "coach_week, by_assistant: true); workouts the owner planned themselves are "
@@ -1306,7 +1379,7 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         {
             "date": Annotated[str, "YYYY-MM-DD, today up to 28 days ahead."],
             "name": Annotated[str, "Short title, in the owner's language, as the owner sees it on the head unit."],
-            "type": Annotated[str, "Ride (default), VirtualRide, GravelRide, MountainBikeRide, WeightTraining, Hike..."],
+            "type": Annotated[str, "Ride (default), VirtualRide, GravelRide, MountainBikeRide, Run, TrailRun, VirtualRun, WeightTraining, Hike..."],
             "description": Annotated[str, "The workout in Intervals.icu syntax."],
             "event_id": Annotated[str, "Optional: rewrite this event (one the assistant planned)."],
             "confirm": Annotated[bool, "false = preview only. true = write, after the owner's yes."],

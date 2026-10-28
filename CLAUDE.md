@@ -41,7 +41,7 @@ none of them can delete, rename, move or share a file).
 Drive reads are confined to the
 folder ids in `DRIVE_ALLOWED_FOLDERS` and everything beneath them. Intervals.icu reads through
 `assistant/intervals.py` (eight `coach_*` reads, metrics in
-`assistant/coach_metrics.py`) for the cycling coach, plus one write,
+`assistant/coach_metrics.py`) for the endurance coach (cycling, running), plus one write,
 `coach_plan_workout`, which puts a planned workout on the Intervals calendar
 (and so on Garmin Connect and the head unit) only after a preview in an earlier
 turn, never from a routine, and rewrites only workouts it planned itself; routines with

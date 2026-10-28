@@ -2,9 +2,11 @@
 
 How to turn tool output into judgement. `SKILL.md` says what to do and in
 what voice; this file says how to read each kind of session, what a pattern
-across sessions means, and how to build the owner's training. Evidence behind the
-claims is in `evidence.md`; session templates are in
-`section-11/workout-library/WORKOUT_REFERENCE.md`.
+across sessions means, and how to build the owner's training, in whichever
+endurance sports the brief names. Evidence behind the claims is in
+`evidence.md`; session templates are in
+`section-11/workout-library/WORKOUT_REFERENCE.md` for the bike and
+`run-library.md` for running.
 
 ## 1. First, name the session's intent
 
@@ -21,6 +23,10 @@ then the zone split.
 | no set, ≥ 2.5 h | long / durability | decoupling if readable, late-ride power, fuel |
 | no set, IF 0.75–0.90, high VI, hilly | **unstructured hard ride** | what it trained, and whether that was meant |
 | MTB without power | MTB (HR only) | HR zones, time, climbing, technique |
+| run, `main_set` reps near Z4 pace | run threshold (RUN-T1/T2) | held pace (`pace_fade_pct`), HR creep |
+| run, `main_set` reps ≤ 5 min at Z5+ or on a hill | run VO2 / hills (RUN-V*, RUN-H1) | held pace or effort, reps completed |
+| run, no set, Z1–Z2 | easy / long run | HR stays easy, GAP on hills, decoupling if readable, niggles |
+| trail run | RUN-TR | HR, vertical, descent load — never raw pace |
 | Hike, WeightTraining | cross-training | fatigue it adds, RPE |
 
 The fifth row is common among amateurs with short weekday slots (hilly loops
@@ -78,6 +84,32 @@ lost on fuelling, and
 - **HRR** (`hrrc_bpm.hrr`): heart-rate drop in 60 s after a hard effort.
   Only meaningful as their own trend.
 
+## 3b. Reading a run
+
+`coach_activity` on a run carries `pace` (avg, `gap`, `pct_threshold`) and,
+for a structured run without power, a pace-based `main_set`.
+
+- **Pace on hills is GAP.** Raw pace on a rolling route says nothing; judge
+  `gap`, and on trail judge HR and vertical only.
+- **Intensity from the run's own thresholds.** `pct_threshold` and pace zones
+  come from the run settings. When `missing_inputs` says there is no
+  threshold pace, the run is judged on HR — and only if the run HR zones are
+  its own (`coach_thresholds.hr_zones_copied_from_ride` false). Running HR
+  sits higher than cycling HR at the same effort; bike zones on a run read
+  every easy run as too hard.
+- **Main set:** `pace_fade_pct` within ±2 % held; −2 to −3 % tired; beyond
+  −3 % target too fast or started too hard (rep 1 against the rest).
+  `pace_cv_pct` > 4 % is uneven pacing or terrain.
+- **Decoupling on runs** is `rough` without power: a trend on flat, even
+  runs, nothing more.
+- **Easy runs drifting to Z3** are the runner's version of the grey ride:
+  slow down on climbs, walk if needed.
+- **Ask about niggles** after a run that was longer or faster than usual, or
+  when the brief lists an injury. One question; a "yes" changes the next run
+  (`run-library.md` §0 rule 5).
+- **Cadence** (`cadence_avg`, steps per minute as Garmin reports it): a trend
+  only. Do not prescribe a number.
+
 ## 4. MTB, hikes, gym
 
 - **A bike without power** (the brief says which): HR zones only. HR lags
@@ -108,15 +140,23 @@ Look for these every weekly review and whenever the owner asks "how am I doing":
 6. **Pw:HR Z2 rising** over weeks: aerobic base improving, even if eFTP is
    flat.
 7. **Load spikes after trips.** A week of hiking followed by hard rides.
-8. **Nothing logged.** No RPE or feel on any ride: the analysis is power-only.
+8. **Run volume jumping.** `coach_history.run_km_visible` or
+   `run_hours_visible` up > 30 % over two weeks, or > 10 % a week for
+   three: the injury pattern in `evidence.md` "Running". Say it before the
+   niggle does.
+9. **Hard days in two sports.** A bike VO2 and a run threshold in the same
+    48 h: two hard sessions, not one each. Check `coach_load.monotony_by_sport_7d`
+    and the week's sessions across sports, not per sport.
+10. **Nothing logged.** No RPE or feel on any ride: the analysis is power-only.
    Ask them to add RPE in Intervals or tell you after rides.
 
 ## 6. Building training
 
 ### The athlete's frame
 
-Everything personal comes from `context/training-rules.md` (age, weight,
-availability, goal event and its distance, bikes and power meters) and from
+Everything personal comes from `context/training-rules.md` (sports and their
+weekly sessions, main sport, age, weight, availability, goal event, its sport
+and distance, devices) and from
 `memory/wiki/training.md` (agreed plan, current phase). **What the goal event
 demands -- distance, climbing, terrain, duration -- is in the brief or must be
 asked.** Earlier events in the season are training races unless the brief
@@ -135,6 +175,46 @@ current phase there when the data says so.
 | Build | ~9 weeks | VO2 and threshold, efforts shaped like the goal's demands (long climbs at 75–90 % FTP, surges, low cadence where relevant). Earlier events as B races. Fuel practice at 80–90 g/h. |
 | Specific | ~4 weeks | Race simulations on the goal's bike and terrain: long days, back-to-back weekend days. Durability. |
 | Taper | last ~2 weeks | Volume −40–60 %, intensity and frequency kept (Bosquet 2007). Section 11 race-week protocol. |
+
+For a running goal the same phases hold, with run templates
+(`run-library.md` §3): Prep is easy running and hill sprints, building
+frequency; Base adds RUN-T1 and the long run; Build adds VO2 (RUN-V*) and
+race-pace work (RUN-L2); Specific is race-pace long runs and, for trail,
+vertical and descents; Taper the same cut. Whatever the bike phase, run
+volume follows the impact rules (`run-library.md` §0), not the bike's ±10 %
+alone.
+
+### More than one sport
+
+The brief says which sports and which is main. One plan, one fatigue:
+
+- **Two hard sessions a week in total**, not per sport. The main sport gets
+  the hard sessions that matter most for the goal; the other sport is mostly
+  easy volume, with at most one hard session of its own when the goal needs
+  it.
+- **Riding is the recovery sport.** When the legs or a niggle say no to a
+  run, an easy ride keeps the aerobic work with no impact. The reverse is not
+  true: a run is never recovery from a hard ride.
+- **Order in a day:** hard first, easy second; never a hard run the day after
+  the long ride or a long run the day after a hard ride.
+- **Brick** (bike then run): one hard session. Only when the goal is
+  multisport.
+- Load is one number across sports (`coach_load`), split in
+  `load_7d_cycling` / `load_7d_running`; Intervals' load for runs and rides
+  is not the same physiological cost — a run's load costs more recovery.
+
+Example week, cyclist with a running goal second (adapt to the brief's
+slots):
+
+| Day | Session |
+|---|---|
+| Mon | Rest or gym |
+| Tue | Bike hard (VO2) |
+| Wed | RUN-E2 |
+| Thu | Run hard (RUN-T1 or RUN-H1) |
+| Fri | Rest or easy ride |
+| Sat | Long ride |
+| Sun | RUN-L1 short, or rest |
 
 ### Their week
 
@@ -156,7 +236,7 @@ slots of about an hour and a free weekend:
 Gym goes on a hard day (after the ride, hours later) or a rest day, never
 the day before Tue/Thu or the long ride (Wilson 2012; library §3.4).
 
-### Gym: legs for cycling
+### Gym: legs for endurance
 
 Prep phase, 2×/week; base onwards, 1×/week heavy (Rønnestad 2010, both
 studies). After a warm-up, 3 sets:
@@ -167,23 +247,30 @@ studies). After a warm-up, 3 sets:
 - standing calf raise
 - plus core (plank variations, dead bug) and hip mobility
 
+Runners add single-leg work and calf/Achilles loading (eccentric calf
+raises, step-downs) and, once the base is there, low-volume plyometrics
+(pogo hops, skips): economy and injury resistance (Blagrove 2018; Lauersen
+2014).
+
 Lift heavy and controlled down, push fast. No sets to failure in the week
-of a key ride. New to heavy lifting: two weeks at 12–15 RM first to learn
+of a key session. New to heavy lifting: two weeks at 12–15 RM first to learn
 the movement. They log RPE so the load counts (Foster 2001).
 
 ### Writing one session
 
 Every prescribed session has, in the owner's language (headings translated):
 
-1. **Name and template** (`TH-2`, `VO2-2`…) and the phase it belongs to.
-2. **Structure** with times and **watt targets from `coach_thresholds`**, and
-   which base (FTP or eFTP) they come from. Cadence where it matters; HR
+1. **Name and template** (`TH-2`, `VO2-2`, `RUN-T1`…) and the phase it
+   belongs to.
+2. **Structure** with times and targets from `coach_thresholds`: watts for
+   the bike (and which base, FTP or eFTP), pace zones in min/km for a run
+   (or HR when the run has no threshold pace). Cadence where it matters; HR
    expectation for the last reps.
 3. **Purpose** in one or two sentences of physiology in plain words: what this
    session changes in them and why it matters for the goal.
 4. **Why this and not something else**: one evidence line from `evidence.md`.
 5. **How we'll know it went well**: the criterion you will check in the
-   post-ride analysis (fade within 3 %, HR in the last rep at 160–170 bpm,
+   post-session analysis (fade within 3 %, HR in the last rep at 160–170 bpm,
    decoupling < 5 %…). This closes the loop: the next analysis judges against
    it.
 6. **If…**: what to do if the legs are bad (drop a rep, switch to AE-1), or if
@@ -191,5 +278,5 @@ Every prescribed session has, in the owner's language (headings translated):
 7. **Fuel** if > 75 min.
 
 Rules from the library still hold: progression only when its criteria are
-met; ±10 % volume per week; 48 h between hard sessions; readiness has the
-final say.
+met; ±10 % volume per week (and the run impact caps); 48 h between hard
+sessions across sports; readiness has the final say.

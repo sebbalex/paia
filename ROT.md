@@ -81,7 +81,7 @@ Same shape for every topic they hand you. The naming is mechanical: the list is
 | `home-duties` | `home-duties-rules` | recurring upkeep, cadences, part numbers |
 | `watchlist` | `watchlist-rules` | topics followed for information |
 | `adventures` | `adventures-rules` | trips by bike or on foot, and what they taught |
-| `training` | `training-rules` | cycling training state, thresholds, goal, lessons |
+| `training` | `training-rules` | endurance training state (cycling, running), thresholds, goal, lessons |
 
 The pairs overlap at the edges — an errand versus a recurring duty, a price
 versus a topic. Each rules file says where the borderline case goes. Read it
@@ -318,7 +318,7 @@ Facts, newest first. Link others with [[their-name]].
   falls back to search the way it worked before. That is a weaker answer, not a
   broken one -- say which you gave.
 
-- **Intervals.icu: eight reads and one write, for the cycling coach.** `coach_readiness`,
+- **Intervals.icu: eight reads and one write, for the endurance coach (cycling, running).** `coach_readiness`,
   `coach_load`, `coach_sessions`, `coach_activity`, `coach_week`,
   `coach_history`, `coach_power_curve`, `coach_thresholds`. They return finished numbers -- use them as given, never
   redo the arithmetic, and carry their `missing_inputs` into the answer.

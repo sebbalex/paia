@@ -16,7 +16,7 @@ Work out today's date first; yesterday is the day before.
 Data, all through the tools: `coach_readiness` (today), `coach_sessions`
 (7 days) to find yesterday's sessions and see them in context,
 `coach_activity` on each of yesterday's sessions, `coach_week` for what is
-planned today, `coach_thresholds` for watts, `coach_load` if the week's load
+planned today, `coach_thresholds` for watts or paces, `coach_load` if the week's load
 matters to the call. Read "Last prescribed" in `memory/wiki/training.md` and
 judge yesterday against it when it was prescribed. For the shape of the
 week, use the availability in `context/training-rules.md`.
@@ -36,8 +36,8 @@ and keep or modify it; if nothing is planned, propose the session from the
 phase in the wiki and the week so far (two hard sessions a week, 48 h apart,
 gym on a hard or rest day, never the day before a key session or the long
 ride). Fit it to the weekday slot in `context/training-rules.md`. If the
-rules ask for a pre-ride reminder (power meter zero-offset, say), end with it
-on riding days.
+rules ask for a pre-session reminder (power meter zero-offset, say), end with it
+on the days of the sport it is for.
 
 Then the footer the skill specifies. Nobody is there to answer now: no "do you
 want me to...". At most one question at the end, answerable later in chat, only
