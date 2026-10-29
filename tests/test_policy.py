@@ -74,6 +74,39 @@ def main() -> int:
     check("write raw log", *verdict("Write", file_path="memory/raw/2026-01-01.md")[:1], want=False)
     check("write wiki page", *verdict("Write", file_path="memory/wiki/x.md")[:1], want=True)
 
+    print("\nwiki pages are edited, never replaced whole")
+    # 2026-10-29: asked to add one log line, a model wrote log.md as that line
+    # alone and every earlier entry was lost.
+    wiki = root / "memory" / "wiki"
+    (wiki / "training.md").write_text("---\nname: training\n---\nFTP 250\n")
+    (wiki / "empty.md").write_text("")
+    check("write over existing page",
+          *verdict("Write", file_path="memory/wiki/training.md", content="x")[:1], want=False)
+    check("write over empty page",
+          *verdict("Write", file_path="memory/wiki/empty.md", content="x")[:1], want=True)
+    check("edit existing page",
+          *verdict("Edit", file_path="memory/wiki/training.md",
+                   old_string="FTP 250", new_string="FTP 260")[:1], want=True)
+    check("write new log.md", *verdict("Write", file_path="memory/wiki/log.md", content="# Log\n")[:1], want=True)
+    (wiki / "log.md").write_text("# Log\n\n## [2026-10-28 22:40] wiki | a\n")
+    check("write over log.md",
+          *verdict("Write", file_path="memory/wiki/log.md", content="# Log\n")[:1], want=False)
+    check("prepend to log.md",
+          *verdict("Edit", file_path="memory/wiki/log.md", old_string="# Log\n",
+                   new_string="# Log\n\n## [2026-10-29 09:00] wiki | b\n")[:1], want=True)
+    check("remove a log line",
+          *verdict("Edit", file_path="memory/wiki/log.md",
+                   old_string="## [2026-10-28 22:40] wiki | a\n", new_string="")[:1], want=False)
+    check("bump log.md updated",
+          *verdict("Edit", file_path="memory/wiki/log.md",
+                   old_string="updated: 2026-10-20", new_string="updated: 2026-10-29")[:1], want=True)
+    check("updated: line smuggling more text",
+          *verdict("Edit", file_path="memory/wiki/log.md",
+                   old_string="updated: 2026-10-20\n## [x] a", new_string="updated: 2026-10-29")[:1], want=False)
+    check("rewrite a log line",
+          *verdict("Edit", file_path="memory/wiki/log.md",
+                   old_string="wiki | a", new_string="wiki | z")[:1], want=False)
+
     print("\nmemory tools (the MCP prefix varies)")
     # claude-mem exposes mcp__plugin_claude-mem_mcp-search__search under Claude
     # Code and mcp__mcp-search__search elsewhere. The policy listed only the

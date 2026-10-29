@@ -21,7 +21,7 @@ scripts/distill.py (nightly) --------------> memory/wiki/ (authoritative)
 
 Read `ROT.md` for the rules. Short version:
 
-- `memory/wiki/` — curated facts, git-tracked, the source of truth.
+- `memory/wiki/` — curated facts, the source of truth (git-tracked only if you set up `.instance.git`).
 - claude-mem — automatic semantic index over every session. Finds the thread;
   never trusted as fact.
 - `memory/raw/` — daily plaintext log. Survives everything else. Deliberately

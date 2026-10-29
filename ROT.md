@@ -93,7 +93,7 @@ Three tiers. Do not confuse them.
 
 | Question | Store |
 |---|---|
-| "What is true about X?" | `memory/wiki/x.md` — authoritative, git-tracked |
+| "What is true about X?" | `memory/wiki/x.md` — authoritative |
 | "Did we ever discuss X?" | claude-mem MCP (`search`, then `get_observations`) |
 | "What was said on Tuesday?" | `memory/raw/YYYY-MM-DD.md` — append-only log |
 
@@ -153,6 +153,16 @@ Facts, newest first. Link others with [[their-name]].
   replace the old line and bump `updated`. Don't append and let both stand.
   The one exception is `log.md`, where the sequence *is* the content.
 - Dates absolute, never "yesterday" or "last week".
+- **`Write` creates, `Edit` changes.** `Write` on a page that already exists
+  replaces it whole, and whatever you didn't retype is gone: policy refuses
+  it. To change a page, `Read` it, then `Edit` only the lines that move.
+  `log.md` only grows: add an entry with `Edit`, matching the line the
+  entry goes under and repeating that line at the start of `new_string`;
+  never remove or reword an old one. Bumping its `updated:` is the one
+  other edit allowed.
+- Assume no backup. On some installs the wiki has no git history and no
+  undo you can reach. If you destroy something, say so plainly; don't tell
+  the owner to restore it from git.
 
 ## Answering
 

@@ -61,6 +61,10 @@ _WRITE_ROOTS = (
 # already active would mean obtaining recurring execution, the persistence
 # everything else in this module exists to deny. The model may propose them,
 # the owner activates them with a command that goes through the transport.
+_WIKI_LOG = "memory/wiki/log.md"
+# The one change to log.md that is not an addition: its frontmatter date.
+_UPDATED_LINE = re.compile(r"\Aupdated:[ \t]*[\w:-]+\n?\Z")
+
 _ENABLED_TRUE = re.compile(r"^\s*enabled\s*:\s*true\s*$", re.I | re.M)
 
 # A skill is a method the model reads and then follows, so a live one has the
@@ -489,6 +493,10 @@ class Policy:
                     "with 'enabled: false' and tell the owner to activate it with "
                     "/enable",
                 )
+        if tool in _WRITE_TOOLS and self._in_wiki(path):
+            refusal = self._check_wiki_write(tool, path, tool_input)
+            if refusal is not None:
+                return refusal
         if tool in _WRITE_TOOLS:
             skill = self._skill_slug(path)
             if skill is not None:
@@ -536,6 +544,51 @@ class Policy:
         except ValueError:
             return None
         return rel[0] if len(rel) > 1 else ""
+
+    def _in_wiki(self, path: Path) -> bool:
+        try:
+            return path.relative_to(self._root).parts[:2] == ("memory", "wiki")
+        except ValueError:
+            return False
+
+    def _check_wiki_write(self, tool: str, path: Path,
+                          tool_input: dict) -> Decision | None:
+        """Refuse the two writes that silently destroy wiki content.
+
+        A weaker model asked to add one line to log.md wrote the whole file
+        with only that line, and every earlier entry was gone (2026-10-29).
+        ROT.md already said the log accumulates; the model ignored it. So:
+        Write only creates -- an existing page changes through Edit, one
+        passage at a time -- and log.md only grows: an Edit must keep the
+        text it matched, bar bumping `updated:` in the frontmatter.
+        Unreadable counts as existing, failing closed.
+        """
+        if tool == "Write":
+            try:
+                existing = path.stat().st_size > 0
+            except FileNotFoundError:
+                existing = False
+            except OSError:
+                existing = True
+            if existing:
+                return Decision(
+                    False,
+                    "that wiki page already exists -- Write would replace it "
+                    "whole. Use Edit to change only the lines that need it",
+                )
+            return None  # a new page, log.md included
+        if path.relative_to(self._root).as_posix() == _WIKI_LOG:
+            old = str(tool_input.get("old_string", ""))
+            new = str(tool_input.get("new_string", ""))
+            bump = _UPDATED_LINE.match(old) and _UPDATED_LINE.match(new)
+            if tool != "Edit" or not (old in new or bump):
+                return Decision(
+                    False,
+                    "log.md only grows -- add the new entry with Edit, keeping "
+                    "the line you matched in new_string; never remove or "
+                    "rewrite existing entries",
+                )
+        return None
 
     def _in_routines(self, path: Path) -> bool:
         try:

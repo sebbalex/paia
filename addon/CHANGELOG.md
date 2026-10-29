@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+
+- Wiki pages can no longer be overwritten whole: Write only creates a page, changes go through Edit, and memory/wiki/log.md only grows. Protects against models that rewrite a file to add one line.
+
 ## 0.3.4
 
 - Coach covers running as well as cycling: run pace, grade-adjusted pace and pace zones, per-sport load, run thresholds, a running workout library and multi-sport planning. Existing installs: compare your context/training-rules.md with the new default.
