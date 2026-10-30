@@ -62,6 +62,8 @@ _WRITE_ROOTS = (
 # everything else in this module exists to deny. The model may propose them,
 # the owner activates them with a command that goes through the transport.
 _WIKI_LOG = "memory/wiki/log.md"
+# Under memory/wiki/: brief changes the owner accepts or rejects in chat.
+_PROPOSALS = "proposals"
 # The one change to log.md that is not an addition: its frontmatter date.
 _UPDATED_LINE = re.compile(r"\Aupdated:[ \t]*[\w:-]+\n?\Z")
 
@@ -562,7 +564,23 @@ class Policy:
         passage at a time -- and log.md only grows: an Edit must keep the
         text it matched, bar bumping `updated:` in the frontmatter.
         Unreadable counts as existing, failing closed.
+
+        memory/wiki/proposals/ holds brief changes waiting for the owner's
+        /accept (assistant/proposals.py). A file there is applied over
+        context/<name> as a whole, so it may only be named after a brief that
+        exists -- anything else would be a brief nobody asked for, or a path
+        the transport should never be handed.
         """
+        rel = path.relative_to(self._root).parts
+        if rel[:3] == ("memory", "wiki", _PROPOSALS):
+            brief = self._root / "context" / rel[-1]
+            if len(rel) != 4 or path.suffix != ".md" or not brief.is_file():
+                return Decision(
+                    False,
+                    "a proposal is memory/wiki/proposals/<brief>.md, named "
+                    "after a file that exists in context/ -- the whole new "
+                    "brief, which the owner reviews with /review <brief>",
+                )
         if tool == "Write":
             try:
                 existing = path.stat().st_size > 0

@@ -280,8 +280,8 @@ once the intake is done.
      what a successful season means to them, trade-offs they will not accept.
 4. Write each answer to `memory/wiki/training.md` under "Athlete profile",
    in English, dated, as they said it. Stable preferences that belong in their
-   brief: tell them which lines they may want to copy into
-   `context/training-rules.md` — you cannot write there.
+   brief go in a proposal for `training-rules` (ROT.md, "Changing a brief"),
+   and you tell them `/review training-rules`.
 5. Only then build the plan. State which unanswered items the plan assumes
    and how.
 

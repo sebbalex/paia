@@ -42,12 +42,15 @@ PROMPT = """Distil today's conversation log into durable memory.
    made sense inside one exchange.
 6. Update `memory/wiki/index.md`: one line per page, grouped by theme. It
    must list exactly the pages that really exist -- no entries for pages never
-   written, no pages missing from the index.
+   written, no pages missing from the index (`proposals/` excepted, see 9).
 7. Add an entry at the top of `memory/wiki/log.md` in the format
    `## [YYYY-MM-DD HH:MM] wiki | what you changed`. This one accumulates: do
    not replace earlier entries. If the file goes past three months, move the
    oldest ones to the bottom under `## Archive`.
 8. Write everything in English, whatever language the log is in.
+9. Leave `memory/wiki/proposals/` alone: those are brief changes waiting
+   for the owner's /accept, not wiki pages. Do not edit them, do not list
+   them in the index, do not create new ones.
 
 Then reply with a one-line summary: how many pages you created and updated.
 If the log has nothing worth keeping, write nothing and say so."""

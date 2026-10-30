@@ -380,6 +380,37 @@ nothing the assistant cannot already do: no shell, no writes outside
 and an outbound channel, which is why activation is the boundary worth
 guarding.
 
+## Briefs: proposed by the model, accepted by the owner
+
+A brief in `context/` is a rule every later turn follows, so the model writing
+one would be the same standing foothold as a live routine. It still cannot:
+`context/` is not in `_WRITE_ROOTS`, and in the container `ROOT/context` is
+root-owned and read-only.
+
+What it can do is propose. `memory/wiki/proposals/<brief>.md` is inside the
+wiki write root, and `_check_wiki_write` narrows it further: the file must be
+named after a brief that exists in `context/`, one level deep, Markdown. The
+owner decides with `/review`, `/accept` and `/reject`, handled in
+`assistant/main.py` before the model sees the message
+(`assistant/proposals.py`):
+
+- `/review` sends the diff and stores the proposal's sha256 in
+  `state/reviewed.json`, which no tool can read or write;
+- `/accept` applies only a proposal whose current hash is the one reviewed,
+  so an edit after the owner read it — an injection racing the owner —
+  means review again;
+- the text must be a whole brief with its own `name:` in the frontmatter.
+
+`/accept` writes the add-on config share's `context/`, which `own()` hands
+to the `assistant` account; the model cannot reach it, because every path
+outside ROOT is secret to policy. The supervisor, as root, syncs the share
+into `ROOT/context` when it changes and resets its modes. Outside the add-on
+there is no target: `/accept` says so, and `context/` stays read-only to
+the process under systemd as before.
+
+What this does not stop: an owner accepting a diff they did not read. The
+diff is the defence; it is shown in full.
+
 ## Skills
 
 A skill is a method the assistant reads and then follows: how a price is

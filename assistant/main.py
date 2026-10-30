@@ -17,6 +17,7 @@ from . import coach_charts
 from . import coach_report
 from . import config as config_module
 from . import memory
+from . import proposals as proposals_module
 from . import routines as routines_module
 from .agent import Brain, make_brain
 from .channels import Delivery, GwsMailer
@@ -130,6 +131,10 @@ COMMANDS: list[tuple[str, str]] = [
     ("enable", "enable a routine — /enable <name>"),
     ("disable", "suspend a routine — /disable <name>"),
     ("run", "run a routine now — /run <name>"),
+    ("proposals", "brief changes waiting for you"),
+    ("review", "see a brief change — /review <name>"),
+    ("accept", "apply a reviewed brief change — /accept <name>"),
+    ("reject", "discard a brief change — /reject <name>"),
     ("help", "what I can do"),
 ]
 
@@ -138,7 +143,10 @@ HELP = "Commands:\n\n" + "\n".join(
 ) + """
 
 To create one, just talk to me: tell me what to do and when. I write it
-disabled, then you enable it with /enable."""
+disabled, then you enable it with /enable.
+
+Your briefs in context/ work the same way: I propose a change, you
+/review it and /accept it."""
 
 # Sent once, to the chat that just paired: it is the first thing the owner
 # reads from the bot, so it says what happened and what comes next.
@@ -216,7 +224,50 @@ async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
         )
         return True
 
+    if command in ("proposals", "review", "accept", "reject"):
+        await telegram.send(incoming.chat_id, _proposal_command(cfg, command, argument))
+        return True
+
     return False  # not one of ours: let the model handle it
+
+
+def _proposal_command(cfg, command: str, argument: str) -> str:
+    """Brief changes: the model proposes, these four decide.
+
+    In Python for the same reason as /enable: a brief is a rule every later
+    turn follows, so changing one is the owner's act, never the model's.
+    """
+    if command == "proposals":
+        names = proposals_module.list_open(cfg.root)
+        if not names:
+            return "No brief changes waiting."
+        return "Waiting for you:\n\n" + "\n".join(
+            f"`{n}` — `/review {n}`" for n in names)
+    if not argument:
+        return f"Which one? `/{command} <name>`, see `/proposals`."
+    try:
+        if command == "review":
+            text, fingerprint = proposals_module.diff(cfg.root, argument)
+            proposals_module.remember_review(cfg.state_dir, argument, fingerprint)
+            name = argument.strip().lower().removesuffix(".md")
+            if not text:
+                return f"`{name}`: no change against the brief in force. `/reject {name}`?"
+            return (f"```diff\n{text}```\n\n"
+                    f"`/accept {name}` to apply, `/reject {name}` to discard.")
+        if command == "accept":
+            if cfg.context_target is None:
+                return ("Not on this install: context/ is read-only here. "
+                        "Copy the proposal from memory/wiki/proposals/ by hand.")
+            name = proposals_module.apply(cfg.root, cfg.state_dir,
+                                          cfg.context_target, argument)
+            return f"`{name}` applied. In force within a few seconds."
+        name = proposals_module.reject(cfg.root, cfg.state_dir, argument)
+        return f"`{name}` discarded."
+    except proposals_module.ProposalError as exc:
+        return str(exc)
+    except OSError as exc:
+        log.exception("brief %s failed", command)
+        return f"Cannot do it: {exc.strerror or exc}"
 
 
 async def _run_routine(brain: Brain, delivery: Delivery,

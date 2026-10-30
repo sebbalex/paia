@@ -151,9 +151,53 @@ def test_llm() -> None:
         os.environ.pop("ANTHROPIC_API_KEY")
 
 
+def test_brief_sync() -> None:
+    print("\nbriefs: share -> context/ while running")
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        root, config = _setup(tmp)
+        share = config / "context"
+        share.mkdir(parents=True)
+        (share / "training-rules.md").write_text("old\n")
+        walked: list[Path] = []
+        real_walk = E._walk
+        E._walk = lambda path, *a, **k: walked.append(path)  # chown to root needs root
+        try:
+            last = E.sync_briefs_if_changed(0.0)
+            brief = root / "context" / "training-rules.md"
+            check("first sync copies", brief.read_text() == "old\n")
+            check("modes put back on context/", walked == [root / "context"], str(walked))
+            check("no change, no sync", E.sync_briefs_if_changed(last) == last)
+
+            os.utime(share / "training-rules.md", (last + 5, last + 5))
+            (share / "training-rules.md").write_text("accepted\n")
+            os.utime(share / "training-rules.md", (last + 5, last + 5))
+            last = E.sync_briefs_if_changed(last)
+            check("a changed brief arrives without a restart", brief.read_text() == "accepted\n")
+
+            (share / "training-rules.md").unlink()
+            os.utime(share, (last + 10, last + 10))
+            E.sync_briefs_if_changed(last)
+            check("a brief removed from the share goes", not brief.exists())
+        finally:
+            E._walk = real_walk
+
+        E.OPTIONS = tmp / "none.json"
+        for name in _PASSTHROUGH:
+            os.environ.pop(name, None)
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "sk-ant-oat-x"
+        os.environ["TELEGRAM_BOT_TOKEN"] = "1:a"
+        env = E.build_env()
+        check("accept target points at the share",
+              env.get("ASSISTANT_CONTEXT_TARGET") == str(share), str(env.get("ASSISTANT_CONTEXT_TARGET")))
+        for name in _PASSTHROUGH:
+            os.environ.pop(name, None)
+
+
 def main() -> int:
     test_import()
     test_llm()
+    test_brief_sync()
     if FAILURES:
         print("\n".join(["", "FAILURES:", *FAILURES]))
         return 1

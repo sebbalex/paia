@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9
+
+- Briefs change from the chat: the assistant proposes a whole new brief, you read the diff with /review <brief> and apply it with /accept (/proposals lists, /reject discards). The coach's intake files its stable answers this way instead of asking you to copy lines by hand. Edits to context/ on the share now apply within seconds, no restart.
+
 ## 0.3.8
 
 - Pair instead of looking up your Telegram id: leave telegram_allowed_user_ids empty, find `PAIRING CODE` in the Log tab, send it to the bot. That chat becomes the owner and pairing closes. Ids in the options still work and replace a paired owner.

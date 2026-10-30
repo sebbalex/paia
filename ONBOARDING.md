@@ -81,7 +81,7 @@ share and prints the options as YAML to paste into the Configuration tab:
 python3 scripts/onboard.py --addon --root /Volumes/addon_configs/<hash>_paia
 ```
 
-Then restart the add-on: edits take effect only on restart. Without the
+The add-on picks edits up within a few seconds, no restart. Without the
 wizard, edit the `TO FILL` lines by hand through the share, Studio Code
 Server, or the File editor — the steps are in `addon/DOCS.md`, "Filling in
 your briefs".

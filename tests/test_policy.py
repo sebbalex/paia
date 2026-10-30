@@ -77,6 +77,33 @@ def main() -> int:
     check("write raw log", *verdict("Write", file_path="memory/raw/2026-01-01.md")[:1], want=False)
     check("write wiki page", *verdict("Write", file_path="memory/wiki/x.md")[:1], want=True)
 
+    print("\nbrief proposals")
+    (root / "context" / "training-rules.md").write_text("---\nname: training-rules\n---\nx\n")
+    check("propose a change to an existing brief",
+          *verdict("Write", file_path="memory/wiki/proposals/training-rules.md",
+                   content="---\nname: training-rules\n---\ny\n")[:1], want=True)
+    check("still cannot write the brief itself",
+          *verdict("Write", file_path="context/training-rules.md", content="y")[:1], want=False)
+    check("proposal for a brief that does not exist",
+          *verdict("Write", file_path="memory/wiki/proposals/new-rules.md", content="y")[:1],
+          want=False)
+    check("proposal in a subfolder",
+          *verdict("Write", file_path="memory/wiki/proposals/x/training-rules.md",
+                   content="y")[:1], want=False)
+    check("proposal that is not Markdown",
+          *verdict("Write", file_path="memory/wiki/proposals/training-rules.md.txt",
+                   content="y")[:1], want=False)
+    (wiki_proposals := root / "memory" / "wiki" / "proposals").mkdir(parents=True)
+    (wiki_proposals / "training-rules.md").write_text("---\nname: training-rules\n---\ny\n")
+    check("a second Write over an open proposal",
+          *verdict("Write", file_path="memory/wiki/proposals/training-rules.md",
+                   content="z")[:1], want=False)
+    check("an Edit of an open proposal",
+          *verdict("Edit", file_path="memory/wiki/proposals/training-rules.md",
+                   old_string="y", new_string="z")[:1], want=True)
+    check("read reviewed fingerprints",
+          *verdict("Read", file_path="state/reviewed.json")[:1], want=False)
+
     print("\nwiki pages are edited, never replaced whole")
     # 2026-10-29: asked to add one log line, a model wrote log.md as that line
     # alone and every earlier entry was lost.

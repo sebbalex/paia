@@ -239,6 +239,11 @@ class Config:
     # the Google account it is logged in as. One fixed address from the
     # environment, never one the model picks. Falls back to SMTP_TO.
     mail_to: str = ""
+    # Where /accept writes an accepted brief (assistant/proposals.py): the
+    # add-on config share, which the supervisor syncs into the read-only
+    # context/. None outside the add-on -- on a VPS context/ is read-only to
+    # this process by systemd, and stays so; the owner copies by hand there.
+    context_target: Path | None = None
 
     @property
     def state_dir(self) -> Path:
@@ -302,6 +307,8 @@ def load() -> Config:
         hrv_cutover_date=hrv_cutover,
         routine_timeout_seconds=int(os.environ.get("ROUTINE_TIMEOUT_SECONDS", "") or 900),
         mail_to=(os.environ.get("MAIL_TO") or os.environ.get("SMTP_TO") or "").strip(),
+        context_target=(Path(os.environ["ASSISTANT_CONTEXT_TARGET"])
+                        if os.environ.get("ASSISTANT_CONTEXT_TARGET", "").strip() else None),
         scraper_url=os.environ.get("SCRAPER_URL", "").strip().rstrip("/"),
         scraper_token=os.environ.get("SCRAPER_TOKEN", "").strip(),
         root=root,

@@ -88,7 +88,12 @@ example routine starts disabled.
      `/addon_configs`.
 3. Fill in the lines marked **TO FILL** in each `.md` file, in English, and
    read the rest — every line is a default you may change.
-4. Restart the add-on. Edits take effect only on restart.
+4. Save. The add-on picks the change up within a few seconds, no restart.
+
+Or never open the share: tell the bot what should change. It writes the new
+brief as a proposal, you read the diff with `/review <brief>` and apply it
+with `/accept <brief>` (`/proposals` lists what is waiting, `/reject`
+discards). Accepting writes the same file on the share.
 
 Or let the wizard do steps 2–3 from a laptop with a clone of the repo and the
 Samba share mounted. It asks the questions, fills the briefs on the share, and

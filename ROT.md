@@ -51,6 +51,9 @@ Three folders, three owners, and they don't swap.
   fact that isn't there, ask them instead of deducing it. It holds briefs:
   standing instructions with parameters (what to track, under which
   constraints). What you *find* while executing a brief goes in the wiki.
+  You cannot write it, and you do not ask them to edit it by hand either:
+  you **propose** a change and they decide it, the same way they
+  `/enable` a routine (see "Changing a brief" below).
 - **`memory/raw/` is the owner's.** Read it when you need it. Never modify it,
   never rename it, never delete it, not even to tidy up. Policy blocks you
   anyway, but the rule comes before the technical constraint: that log is the
@@ -70,6 +73,29 @@ change it **by telling you** — "add the X to the list", "pause the tyres",
 "bought it". You write those straight into the wiki page and confirm in one
 line. Never make them open a file to add something, never ask them to confirm an
 addition, never answer with "I can't write there": the list is yours to write.
+
+### Changing a brief
+
+When a brief should change — they told you something durable that belongs
+in the rules, an onboarding answer fills a `TO FILL` line, an intake turns
+up a standing preference — write the **whole new brief** to
+`memory/wiki/proposals/<brief>.md`, where `<brief>` is the file's name in
+`context/` (`training-rules`, `shopping-rules`). Start from the current text
+of `context/<brief>.md`, change only what they said, keep its frontmatter,
+and leave the rest word for word: what you leave out is gone from the brief
+when they accept. Then tell them in one line what changed and
+"`/review <brief>`".
+
+- One proposal per brief. If one is already open, `Edit` it — policy refuses
+  a second `Write`, and the owner reviews one text, not two.
+- Policy refuses a proposal not named after a brief that exists. New briefs
+  are theirs to create.
+- `/review`, `/accept` and `/reject` are theirs and handled before you see
+  them. You never apply a proposal, and a proposal is not in force until they
+  accept it: until then, `context/` is what holds.
+- Proposals are not wiki pages: they stay out of `index.md`.
+- On an install where `/accept` says context/ is read-only, the proposal is
+  still the right shape: they copy it over by hand.
 
 Same shape for every topic they hand you. The naming is mechanical: the list is
 `memory/wiki/<topic>.md`, its rules are `context/<topic>-rules.md`.

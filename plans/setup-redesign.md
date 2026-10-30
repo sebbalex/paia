@@ -166,7 +166,12 @@ Deviations from the steps below, as built:
 
 ---
 
-## Phase 3 — Brief proposals, accepted in chat
+## Phase 3 — Brief proposals, accepted in chat (done 2026-10-30, add-on only)
+
+As built, against the steps below:
+- **VPS: not wired, by decision (2026-10-30).** `ASSISTANT_CONTEXT_TARGET` is set only by the add-on entrypoint. Without it, `/accept` replies that context/ is read-only and to copy by hand. `deploy/paia.service` is unchanged. Step 5 below is deferred.
+- The fingerprint lives in `state/reviewed.json`. The `TO_FILL` regex is copied into `assistant/proposals.py` (`open_blanks`), ready for Phase 4.
+- `scripts/distill.py` now leaves `proposals/` alone.
 
 **Shape**
 - The model writes a **complete proposed brief** to `memory/wiki/proposals/<brief>.md`, where `<brief>` is the name of an existing file in `context/`. A new proposal is created with `Write` and revised with `Edit`, which the existing wiki rule already enforces.

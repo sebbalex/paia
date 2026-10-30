@@ -168,6 +168,10 @@ def build_env() -> dict[str, str]:
         "LC_ALL": "C.UTF-8",
         "TZ": os.environ.get("TZ", "UTC"),
     }
+    if CONFIG.is_dir():
+        # /accept writes accepted briefs here (assistant/proposals.py); the
+        # supervisor syncs them into the read-only context/ the model reads.
+        env["ASSISTANT_CONTEXT_TARGET"] = str(CONFIG / "context")
     for name in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OPENROUTER_API_KEY",
                  "TELEGRAM_BOT_TOKEN",
                  "TELEGRAM_ALLOWED_USER_IDS", "ASSISTANT_MODEL", "ASSISTANT_SKILLS"):
@@ -377,6 +381,34 @@ def _seed_briefs() -> None:
     _sync(briefs, ROOT / "context", "context")
 
 
+def _briefs_mtime() -> float:
+    """Newest change under the share's context/, 0 when there is none."""
+    briefs = CONFIG / "context"
+    if not briefs.is_dir():
+        return 0.0
+    stamps = [briefs.stat().st_mtime]
+    stamps += [p.stat().st_mtime for p in briefs.rglob("*") if not p.is_symlink()]
+    return max(stamps)
+
+
+def sync_briefs_if_changed(last: float) -> float:
+    """Bring context/ in line with the share when the share moved.
+
+    Two writers reach the share while the assistant runs: the owner, over
+    Samba or an editor, and /accept, which writes a brief the owner accepted
+    in chat. Either way the model reads ROOT/context, which stays root-owned
+    and read-only, so the copy happens here, as root, and the mode is put
+    back. Without this, a brief edit waited for a restart.
+    """
+    stamp = _briefs_mtime()
+    if stamp <= last:
+        return last
+    _sync(CONFIG / "context", ROOT / "context", "context")
+    _walk(ROOT / "context", 0, 0, dir_mode=0o555, file_mode=0o444)
+    log("context/ synced from the share")
+    return stamp
+
+
 # What the owner may hand in through the share. Everything else under import/
 # is left there and named in the log: code and identity come from the image,
 # briefs from context/, and the share is not a back door to either.
@@ -473,6 +505,11 @@ def own(uid: int, gid: int) -> None:
         directory = ROOT / rel
         if directory.exists():
             _walk(directory, uid, gid, dir_mode=0o750, file_mode=0o640)
+    # The share's briefs belong to the process so /accept can write them.
+    # The model still cannot: policy treats any path outside ROOT as secret,
+    # and ROOT/context -- what it reads -- stays root's.
+    if (CONFIG / "context").is_dir():
+        _walk(CONFIG / "context", uid, gid, dir_mode=0o750, file_mode=0o640)
     HOME.mkdir(parents=True, exist_ok=True)
     os.chmod(HOME, 0o700)
     # Anything root left behind here -- an `npm` or a `gws auth login` run
@@ -549,12 +586,17 @@ def supervise(env: dict[str, str], uid: int, gid: int, distill_hour: int | None)
     log(f"assistant started, pid {child.pid}")
 
     distiller: subprocess.Popen | None = None
+    briefs = _briefs_mtime()
     due = _next_distill(distill_hour, datetime.now()) if distill_hour is not None else None
     if due is not None:
         log(f"nightly distillation at {due:%Y-%m-%d %H:%M}")
 
     while not _stopping:
         time.sleep(2)
+        try:
+            briefs = sync_briefs_if_changed(briefs)
+        except OSError as exc:
+            log(f"context/ sync failed: {exc}")
         if child.poll() is not None:
             log(f"assistant exited with {child.returncode}, restarting in 5s")
             time.sleep(5)

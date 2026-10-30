@@ -11,7 +11,7 @@ Personal assistant process. Read these in order, they are your operating system:
 .claude/skills/ methods you follow: one folder per skill  (you propose, the owner enables)
 memory/wiki/   authoritative facts, one entity per file  (you write these)
 memory/raw/    append-only conversation log, one file per day  (transport writes)
-context/       static reference material the owner drops in  (read-only to you)
+context/       the owner's briefs  (read-only to you: propose changes in memory/wiki/proposals/)
 scripts/       executable tools you may run
 skills/        vendored gws CLI docs  (reference only — not the skills above)
 assistant/     your own runtime — Telegram transport + SDK loop
