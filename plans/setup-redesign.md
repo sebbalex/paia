@@ -223,7 +223,13 @@ As built, against the steps below:
 
 ---
 
-## Phase 4 — Onboarding starts itself
+## Phase 4 — Onboarding starts itself (done 2026-10-30)
+
+As built:
+- `assistant/onboarding.py` takes its topics from the `*-rules.md` files actually in `context/`, in ROT order then alphabetical, so a new brief joins without a code change. The prompt is `assistant/onboarding.md`, a `string.Template` with `$focus`, `$topics` and `$blanks`.
+- `_converse()` now holds the shared turn logic. A turn that raises is reported and the pump keeps running; before this, one exception ended the pump while the process stayed up and answered nobody.
+- The transport's prompt is not written to `memory/raw` as the owner's words. Only the assistant's reply is.
+- Tests: `tests/test_onboarding.py`, 66 checks.
 
 **Implement**
 

@@ -69,22 +69,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 python3 scripts/onboard.py
 ```
 
-Home Assistant add-on: the assistant reads its briefs from
-`/addon_configs/<hash>_paia/context/` (the only `*_paia` folder there),
-copied in read-only at each start, and cannot write them. Start the add-on
-once so the folder is seeded, mount the `addon_configs` share from the Samba
-share add-on (Mac: Finder → ⌘K → `smb://homeassistant.local/addon_configs`),
-and run the wizard from any machine with a clone. It fills the briefs on the
-share and prints the options as YAML to paste into the Configuration tab:
-
-```sh
-python3 scripts/onboard.py --addon --root /Volumes/addon_configs/<hash>_paia
-```
-
-The add-on picks edits up within a few seconds, no restart. Without the
-wizard, edit the `TO FILL` lines by hand through the share, Studio Code
-Server, or the File editor — the steps are in `addon/DOCS.md`, "Filling in
-your briefs".
+Home Assistant add-on: skip the wizard. Fill in three options — bot token,
+`llm_provider`, `llm_credential` — start it, and send the bot the
+`PAIRING CODE` from the Log tab. Pairing starts part 3 by itself, and your
+answers come back as brief proposals you `/review` and `/accept`. Details
+in `addon/DOCS.md`.
 
 It asks, in this order. Enter keeps the bracketed default or skips; a skipped
 brief line stays `TO FILL`, which the assistant treats as unknown and asks
@@ -131,15 +120,16 @@ assistant.main`, or start the add-on) and send it `/help`.
 ## 3. The first conversation
 
 The lists in `memory/wiki/` are the assistant's to write, and the way in is
-talking to it — never a file you edit. Paste this as your first message
-(translate it if you like; it answers in your language either way):
+talking to it — never a file you edit. Send `/onboard` (on the add-on it
+starts by itself right after pairing): the assistant interviews you one topic
+at a time, in your language, files the lists as it goes, and turns answers
+that belong in a brief into proposals — `/review <brief>` shows the diff,
+`/accept <brief>` applies it. `/onboard training` covers one topic; `skip`
+and `stop` work mid-interview, and `/help` says how many `TO FILL` lines are
+still open. The prompt it runs is `assistant/onboarding.md`.
 
-> Onboard me. Interview me one topic at a time, a few short questions each,
-> and file what I answer into the wiki as you go: shopping, daily tasks, home
-> duties, watchlist, adventures, training. Read each topic's rules in
-> `context/` before asking, so you only ask what the entry fields need. Skip a
-> topic when I say skip. At the end, tell me which routines in `routines/`
-> fit what I told you and what each needs to work.
+On a VPS `/accept` cannot write `context/`: copy the proposal from
+`memory/wiki/proposals/` over the brief by hand.
 
 Or seed them yourself, one message at a time. What is worth saying on day one:
 

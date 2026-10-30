@@ -33,6 +33,9 @@ class Cfg:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.routines_dir = root / "routines"
+        self.raw_memory_dir = root / "memory" / "raw"
+        self.state_dir = root / "state"
+        self.context_target = None
         self.allowed_user_ids = frozenset({7})
 
 
@@ -42,6 +45,9 @@ class FakeTelegram:
 
     async def send(self, chat_id: int, text: str) -> None:
         self.sent.append(text)
+
+    async def typing(self, chat_id: int) -> None:
+        pass
 
 
 class FakeDelivery:

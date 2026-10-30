@@ -71,12 +71,22 @@ those files means shipping a new image version, which is the point.
 Your briefs are the exception. On first start, template briefs are seeded
 into **`/addon_configs/<hash>_paia/context/`** — `<hash>` is the short prefix
 Home Assistant gives this add-on repository; it is the only `*_paia` folder
-there — and copied in read-only at every start. That folder is the authority
-from then on; the assistant can read the copy but never write either one.
+there — and kept in sync with the read-only copy the assistant reads. That
+folder is the authority from then on; the assistant can read the copy but
+never write either one.
 The image ships no one's memory: the wiki starts as empty pages and every
 example routine starts disabled.
 
 ### Filling in your briefs
+
+You do not have to open anything. Right after pairing the bot interviews you,
+one topic at a time, and turns your answers into brief proposals: read each
+with `/review <brief>`, apply it with `/accept <brief>` (`/proposals` lists
+what is waiting, `/reject` discards). `/onboard` starts the interview again,
+`/onboard training` only one topic; `/help` says how many `TO FILL` lines
+are still open. Accepting writes the file on the share.
+
+To edit by hand instead:
 
 1. Start the add-on once, so the folder is seeded.
 2. Open it, whichever way you have:
@@ -90,22 +100,8 @@ example routine starts disabled.
    read the rest — every line is a default you may change.
 4. Save. The add-on picks the change up within a few seconds, no restart.
 
-Or never open the share: tell the bot what should change. It writes the new
-brief as a proposal, you read the diff with `/review <brief>` and apply it
-with `/accept <brief>` (`/proposals` lists what is waiting, `/reject`
-discards). Accepting writes the same file on the share.
-
-Or let the wizard do steps 2–3 from a laptop with a clone of the repo and the
-Samba share mounted. It asks the questions, fills the briefs on the share, and
-prints these options as YAML for the Configuration tab:
-
-```sh
-python3 scripts/onboard.py --addon --root /Volumes/addon_configs/<hash>_paia
-```
-
-The wiki lives in `/data`, out of reach of the share. You fill it by talking
-to the bot — see part 3 of `ONBOARDING.md` — or bring it over from an
-instance you already run.
+The wiki lives in `/data`, out of reach of the share. The interview fills it
+as it goes; or bring it over from an instance you already run.
 
 ### Moving an existing instance in
 

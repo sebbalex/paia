@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from onboard import (  # noqa: E402
     CALENDAR_BULLET,
     REPO,
-    addon_options,
     calendar_wiki,
     fill,
     folder_id,
@@ -86,10 +85,6 @@ def test_rest() -> None:
     check("calendar row written", "| Home | `a@group.calendar.google.com` | Europe/Rome | always |" in wiki)
     check("row without id skipped", "Typed" not in wiki)
     check("table not written twice", calendar_wiki(wiki, rows) == wiki)
-    opts = addon_options({"TELEGRAM_ALLOWED_USER_IDS": "1,2", "ASSISTANT_SKILLS": "coach", "OWNER_NAME": "Ada"})
-    check("ids are ints", "telegram_allowed_user_ids: [1, 2]" in opts)
-    check("skills are strings", 'skills: ["coach"]' in opts)
-    check("empty options left out", "mail_to" not in opts)
 
 
 if __name__ == "__main__":

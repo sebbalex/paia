@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from assistant.pairing import OWNER_FILE, Pairing  # noqa: E402
+from assistant.agent import Turn  # noqa: E402
 from assistant.main import PAIRED, _pump  # noqa: E402
 from assistant.telegram import Incoming, Telegram  # noqa: E402
 
@@ -195,6 +196,9 @@ async def test_pump() -> None:
         async def send(self, chat_id, text):
             self.sent.append((chat_id, text))
 
+        async def typing(self, chat_id):
+            pass
+
     class Delivery:
         chat = None
 
@@ -202,16 +206,26 @@ async def test_pump() -> None:
             self.chat = chat_id
 
     class Brain:
-        asked: list[str] = []
+        def __init__(self) -> None:
+            self.asked: list[str] = []
 
         async def ask(self, prompt, **_):
             self.asked.append(prompt)
+            return Turn("first question", True)
 
-    tg, delivery, brain = Tg(), Delivery(), Brain()
-    await _pump(None, tg, brain, None, delivery)
+    class Cfg:
+        def __init__(self, root: Path) -> None:
+            self.root = root
+            self.raw_memory_dir = root / "memory" / "raw"
+
+    with tempfile.TemporaryDirectory() as t:
+        tg, delivery, brain = Tg(), Delivery(), Brain()
+        await _pump(Cfg(Path(t)), tg, brain, None, delivery)
     check("delivery now goes to the paired chat", delivery.chat == 42)
-    check("the owner is greeted", tg.sent == [(42, PAIRED)], str(tg.sent))
-    check("the model is not asked", brain.asked == [], str(brain.asked))
+    check("the owner is greeted first", tg.sent[:1] == [(42, PAIRED)], str(tg.sent))
+    check("the code never reaches the model, the interview does",
+          len(brain.asked) == 1 and "Onboard me" in brain.asked[0], str(brain.asked))
+    check("the first question follows", tg.sent[1:] == [(42, "first question")], str(tg.sent))
 
 
 def main() -> int:

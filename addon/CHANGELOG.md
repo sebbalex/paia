@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10
+
+- The first conversation starts itself: right after pairing the bot interviews you one topic at a time, files the lists, and turns brief answers into proposals for /review and /accept. /onboard starts it again, /onboard <topic> covers one; /help says how many TO FILL lines are still open. The laptop wizard's --addon mode is gone: nothing to mount, nothing to paste.
+
 ## 0.3.9
 
 - Briefs change from the chat: the assistant proposes a whole new brief, you read the diff with /review <brief> and apply it with /accept (/proposals lists, /reject discards). The coach's intake files its stable answers this way instead of asking you to copy lines by hand. Edits to context/ on the share now apply within seconds, no restart.

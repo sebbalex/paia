@@ -17,6 +17,7 @@ from . import coach_charts
 from . import coach_report
 from . import config as config_module
 from . import memory
+from . import onboarding
 from . import proposals as proposals_module
 from . import routines as routines_module
 from .agent import Brain, make_brain
@@ -94,6 +95,9 @@ async def _pump(cfg, telegram: Telegram, brain: Brain,
         if incoming.paired:
             delivery.set_chat(incoming.chat_id)
             await telegram.send(incoming.chat_id, PAIRED)
+            # The first conversation starts itself: the owner should not
+            # have to know what to say to a bot they just met.
+            await _onboard(cfg, telegram, brain, incoming.chat_id)
             continue
         if incoming.text.startswith("/"):
             if await _command(cfg, telegram, brain, delivery, incoming):
@@ -108,20 +112,45 @@ async def _pump(cfg, telegram: Telegram, brain: Brain,
             if not prompt:
                 continue
         await memory.append(cfg.raw_memory_dir, "owner", prompt)
-        typing = asyncio.create_task(_keep_typing(telegram, incoming.chat_id))
-        try:
-            # prompt, not incoming.text: for a voice note the latter is
-            # empty and the model would be answering nothing.
-            turn = await brain.ask(prompt)
-        finally:
-            typing.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await typing
-        # Failures are reported to the owner but kept out of memory: they are not
-        # things the assistant said, and the distiller would treat them as such.
-        if turn.ok:
-            await memory.append(cfg.raw_memory_dir, "assistant", turn.text)
-        await telegram.send(incoming.chat_id, turn.text)
+        # prompt, not incoming.text: for a voice note the latter is empty and
+        # the model would be answering nothing.
+        await _converse(cfg, telegram, brain, incoming.chat_id, prompt)
+
+
+async def _converse(cfg, telegram: Telegram, brain: Brain, chat_id: int,
+                    prompt: str) -> None:
+    """One turn: ask, keep the typing indicator up, file and send the answer."""
+    typing = asyncio.create_task(_keep_typing(telegram, chat_id))
+    try:
+        turn = await brain.ask(prompt)
+    except Exception:
+        # The pump is the bot: a turn that raises must not end it, or the
+        # process stays up and answers nobody until a restart.
+        log.exception("turn failed")
+        await telegram.send(chat_id, "That turn failed; the details are in the log.")
+        return
+    finally:
+        typing.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await typing
+    # Failures are reported to the owner but kept out of memory: they are not
+    # things the assistant said, and the distiller would treat them as such.
+    if turn.ok:
+        await memory.append(cfg.raw_memory_dir, "assistant", turn.text)
+    await telegram.send(chat_id, turn.text)
+
+
+async def _onboard(cfg, telegram: Telegram, brain: Brain, chat_id: int,
+                   topic: str | None = None) -> None:
+    """Start the interview: every topic, or one. The prompt is the
+    transport's, not the owner's words, so it stays out of memory/raw."""
+    try:
+        prompt = onboarding.prompt(cfg.root, topic)
+    except (OSError, KeyError, ValueError):
+        log.exception("cannot build the onboarding prompt")
+        await telegram.send(chat_id, "Cannot start the interview; the details are in the log.")
+        return
+    await _converse(cfg, telegram, brain, chat_id, prompt)
 
 
 # Single list of commands: it feeds both the Telegram menu and /help, so what
@@ -131,6 +160,7 @@ COMMANDS: list[tuple[str, str]] = [
     ("enable", "enable a routine — /enable <name>"),
     ("disable", "suspend a routine — /disable <name>"),
     ("run", "run a routine now — /run <name>"),
+    ("onboard", "interview me to fill the briefs — /onboard [topic]"),
     ("proposals", "brief changes waiting for you"),
     ("review", "see a brief change — /review <name>"),
     ("accept", "apply a reviewed brief change — /accept <name>"),
@@ -167,7 +197,25 @@ async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
     argument = parts[1].strip() if len(parts) > 1 else ""
 
     if command in ("help", "start"):
-        await telegram.send(incoming.chat_id, HELP)
+        blanks = proposals_module.open_blanks(cfg.root)
+        hint = (f"\n\nBriefs still have {blanks} `TO FILL` lines open: `/onboard`."
+                if blanks else "")
+        await telegram.send(incoming.chat_id, HELP + hint)
+        return True
+
+    if command == "onboard":
+        topic = None
+        if argument:
+            topic = onboarding.match(cfg.root, argument)
+            if topic is None:
+                known = onboarding.topics(cfg.root)
+                await telegram.send(
+                    incoming.chat_id,
+                    f"No brief for `{argument}`. Topics: "
+                    + (", ".join(f"`{t}`" for t in known) or "none") + ".",
+                )
+                return True
+        await _onboard(cfg, telegram, brain, incoming.chat_id, topic)
         return True
 
     if command == "routines":

@@ -21,8 +21,9 @@ after asking.
 
 Usage:
   python3 scripts/onboard.py                  # VPS or local checkout
-  python3 scripts/onboard.py --addon          # print Home Assistant options
-  python3 scripts/onboard.py --addon --root /addon_configs/<id>_paia
+
+Home Assistant needs none of this: the add-on asks for three options, pairs
+over Telegram, and the assistant runs the interview itself (addon/DOCS.md).
 """
 
 from __future__ import annotations
@@ -330,7 +331,7 @@ def calendars(gws: str) -> list[dict] | None:
 # -- the interview ----------------------------------------------------------
 
 
-def interview(env: dict[str, str], briefs: Briefs, addon: bool) -> tuple[dict[str, str], dict]:
+def interview(env: dict[str, str], briefs: Briefs) -> tuple[dict[str, str], dict]:
     """Every question, in the order an owner can answer them. Returns the new
     environment and anything else to write (calendar rows)."""
     new = dict(env)
@@ -428,13 +429,12 @@ def interview(env: dict[str, str], briefs: Briefs, addon: bool) -> tuple[dict[st
         "Calendar, Gmail and Drive go through the `gws` CLI. Authenticate it first:\n"
         "  gws auth setup && gws auth login   (as the user the assistant runs as)",
     )
-    if not addon:
-        found_gws = env.get("GWS_BIN") or shutil.which("gws") or ""
-        new["GWS_BIN"] = ask("Path to gws (empty disables Google)", found_gws, "absolute, systemd has no PATH")
-        if new["GWS_BIN"] and confirm("List your calendars now with gws?"):
-            items = calendars(new["GWS_BIN"])
-            if items is not None:
-                extra["calendars"] = _calendar_choices(items)
+    found_gws = env.get("GWS_BIN") or shutil.which("gws") or ""
+    new["GWS_BIN"] = ask("Path to gws (empty disables Google)", found_gws, "absolute, systemd has no PATH")
+    if new["GWS_BIN"] and confirm("List your calendars now with gws?"):
+        items = calendars(new["GWS_BIN"])
+        if items is not None:
+            extra["calendars"] = _calendar_choices(items)
     if "calendars" not in extra and CALENDAR_BULLET in briefs.text("calendar-rules"):
         names = ask("Calendars to show in full, comma-separated (names)", hint="Enter to fill in later")
         if names:
@@ -484,8 +484,7 @@ def interview(env: dict[str, str], briefs: Briefs, addon: bool) -> tuple[dict[st
     new["WHISPER_MODEL"] = ask("Whisper model (tiny|base|small|medium)", env.get("WHISPER_MODEL", "small"), "base on a Pi")
     new["WHISPER_LANGUAGE"] = ask("Force a language code (empty = detect)", env.get("WHISPER_LANGUAGE", ""))
 
-    if not addon:
-        new["ASSISTANT_ROOT"] = env.get("ASSISTANT_ROOT") or str(REPO)
+    new["ASSISTANT_ROOT"] = env.get("ASSISTANT_ROOT") or str(REPO)
     return new, extra
 
 
@@ -539,55 +538,13 @@ def calendar_wiki(text: str, rows: list[dict]) -> str:
     return bump(text.rstrip("\n") + "\n" + "\n".join(table) + "\n")
 
 
-# -- addon ------------------------------------------------------------------
-
-_ADDON = {
-    "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
-    "CLAUDE_CODE_OAUTH_TOKEN": "claude_oauth_token",
-    "ANTHROPIC_API_KEY": "anthropic_api_key",
-    "OPENROUTER_API_KEY": "openrouter_api_key",
-    "ASSISTANT_MODEL": "model",
-    "OWNER_NAME": "owner_name",
-    "OWNER_LANGUAGE": "owner_language",
-    "DRIVE_WRITE_FOLDERS": "drive_write_folders",
-    "MAIL_TO": "mail_to",
-    "SCRAPER_URL": "scraper_url",
-    "SCRAPER_TOKEN": "scraper_token",
-    "INTERVALS_API_KEY": "intervals_api_key",
-    "INTERVALS_ATHLETE_ID": "intervals_athlete_id",
-    "HRV_CUTOVER_DATE": "hrv_cutover_date",
-    "WHISPER_MODEL": "whisper_model",
-    "WHISPER_LANGUAGE": "whisper_language",
-}
-_ADDON_LISTS = {
-    "TELEGRAM_ALLOWED_USER_IDS": "telegram_allowed_user_ids",
-    "ASSISTANT_SKILLS": "skills",
-    "DRIVE_ALLOWED_FOLDERS": "drive_allowed_folders",
-}
-
-
-def addon_options(env: dict[str, str]) -> str:
-    lines = []
-    for key, option in _ADDON_LISTS.items():
-        items = split_list(env.get(key, ""))
-        if key == "TELEGRAM_ALLOWED_USER_IDS":
-            lines.append(f"{option}: [{', '.join(items)}]")
-        else:
-            lines.append(f"{option}: [{', '.join(json.dumps(i) for i in items)}]")
-    for key, option in _ADDON.items():
-        if env.get(key):
-            lines.append(f"{option}: {json.dumps(env[key])}")
-    return "\n".join(lines) + "\n"
-
-
 # -- the rest ---------------------------------------------------------------
 
 
-def seed(root: Path, addon: bool) -> list[str]:
+def seed(root: Path) -> list[str]:
     """defaults/ into place, never over a file that exists (cp -Rn)."""
     copied = []
-    parts = ["context"] if addon else ["context", "memory", "routines"]
-    for part in parts:
+    for part in ("context", "memory", "routines"):
         source = REPO / "defaults" / part
         for path in sorted(source.rglob("*")):
             if path.is_dir():
@@ -624,7 +581,6 @@ def init_instance(root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--root", type=Path, default=REPO, help="instance root (default: this checkout)")
-    parser.add_argument("--addon", action="store_true", help="Home Assistant: print options, edit briefs only")
     args = parser.parse_args()
     root = args.root.resolve()
 
@@ -632,14 +588,14 @@ def main() -> int:
     print("Nothing is written until the end, and you see a summary first.")
 
     env_path = REPO / ".env"
-    env = {} if args.addon else read_env(env_path)
+    env = read_env(env_path)
     # Briefs are read from defaults/ when context/ is not seeded yet, so the
     # questions know which lines are still TO FILL.
     folder = root / "context" if (root / "context" / "calendar-rules.md").exists() else REPO / "defaults" / "context"
     briefs = Briefs(folder)
 
     try:
-        new, extra = interview(env, briefs, args.addon)
+        new, extra = interview(env, briefs)
     except (KeyboardInterrupt, EOFError):
         print("\nStopped. Nothing written.")
         return 1
@@ -650,7 +606,7 @@ def main() -> int:
 
     section("Summary")
     for key in sorted(new):
-        if new[key] != env.get(key, "") or args.addon:
+        if new[key] != env.get(key, ""):
             print(f"  {key}={mask(key, new[key])}")
     for name in sorted(briefs.changed):
         print(f"  context/{name}.md: filled")
@@ -658,27 +614,23 @@ def main() -> int:
         print("Nothing written.")
         return 1
 
-    for path in seed(root, args.addon):
+    for path in seed(root):
         print(f"  seeded {path}")
     briefs.folder = root / "context"
     for path in briefs.write():
         print(f"  wrote {path.relative_to(root)}")
 
-    if args.addon:
-        print("\nPaste into the add-on's Configuration tab (YAML mode). It holds secrets: do not share it.\n")
-        print(addon_options(new))
-    else:
-        write_env(env_path, render_env((REPO / ".env.example").read_text(), new))
-        print("  wrote .env (mode 600)")
-        if rows:
-            wiki = root / "memory" / "wiki" / "calendar.md"
-            wiki.write_text(calendar_wiki(wiki.read_text(), rows))
-            print("  wrote memory/wiki/calendar.md")
-        if not (root / ".instance.git").exists() and confirm(
-            "Keep a private git history of your briefs and wiki (.instance.git)?"
-        ):
-            init_instance(root)
-            print("  .instance.git ready; `git --git-dir=.instance.git snap` takes a snapshot")
+    write_env(env_path, render_env((REPO / ".env.example").read_text(), new))
+    print("  wrote .env (mode 600)")
+    if rows:
+        wiki = root / "memory" / "wiki" / "calendar.md"
+        wiki.write_text(calendar_wiki(wiki.read_text(), rows))
+        print("  wrote memory/wiki/calendar.md")
+    if not (root / ".instance.git").exists() and confirm(
+        "Keep a private git history of your briefs and wiki (.instance.git)?"
+    ):
+        init_instance(root)
+        print("  .instance.git ready; `git --git-dir=.instance.git snap` takes a snapshot")
 
     left = briefs.remaining()
     section("Next")
@@ -686,7 +638,7 @@ def main() -> int:
         print("Still TO FILL (the assistant treats these as unknown and asks):")
         for line in left:
             print(f"  {line}")
-    print("Then: ONBOARDING.md, part 3 -- the first conversation, and enabling routines.")
+    print("Then start the assistant and send it /onboard: it interviews you and proposes the briefs.")
     return 0
 
 
