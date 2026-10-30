@@ -313,9 +313,11 @@ def load() -> Config:
         ),
         owner_name=owner,
         owner_language=os.environ.get("OWNER_LANGUAGE", "").strip() or "English",
+        # `*` reads as "anywhere", so it means what empty means: an allowlist
+        # holding it literally would match no host and close the web.
         web_fetch_domains=frozenset(
             d.strip().lower() for d in domains.split(",") if d.strip()
-        ),
+        ) if "*" not in domains.replace(" ", "").split(",") else frozenset(),
         bot_token=_require("TELEGRAM_BOT_TOKEN"),
         allowed_user_ids=frozenset(int(x) for x in ids.replace(" ", "").split(",") if x),
         model=model or "claude-sonnet-5",

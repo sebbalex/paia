@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6
+
+- web_fetch_allowed_domains is optional again, and `*` in it means the open web instead of blocking every site. telegram_allowed_user_ids takes ids as text, so the options form accepts them.
+
 ## 0.3.5
 
 - Wiki pages can no longer be overwritten whole: Write only creates a page, changes go through Edit, and memory/wiki/log.md only grows. Protects against models that rewrite a file to add one line.

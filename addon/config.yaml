@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.3.5"
+version: "0.3.6"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and
@@ -47,6 +47,7 @@ options:
     - coach
   drive_allowed_folders: []
   drive_write_folders: ""
+  web_fetch_allowed_domains: []
   whisper_model: base
   whisper_language: ""
   distill_hour: 3
@@ -56,10 +57,13 @@ schema:
   # -- required ----------------------------------------------------------
   # @BotFather gives the token, @userinfobot gives the numeric id. That list
   # is the whole access control model: a message from any other id is dropped
-  # by the transport before the model ever sees it.
+  # by the transport before the model ever sees it. Strings, not int: the
+  # UI's list editor saves what is typed as text, and a list of int rejected
+  # it. Older installs holding bare numbers still pass, coerced to str, and
+  # docker/entrypoint.py refuses anything that is not all digits.
   telegram_bot_token: password
   telegram_allowed_user_ids:
-    - int
+    - str
 
   # Exactly one of the two. claude_oauth_token comes from `claude setup-token`
   # and bills against a Claude plan; anthropic_api_key is metered API billing.
@@ -92,8 +96,11 @@ schema:
   # in drive_allowed_folders, or the assistant cannot read back what it wrote.
   # Empty means it creates nothing at Drive.
   drive_write_folders: str?
+  # Domains WebFetch and the page tools may open, subdomains included. Empty,
+  # or `*`, is the open web. The `?` on the item makes the whole list
+  # optional to the supervisor.
   web_fetch_allowed_domains:
-    - str
+    - str?
   # The scraper worker add-on, if it is installed. Empty means the three page
   # tools are not offered and price hunting falls back to search -- which is
   # how it worked before, not a breakage. With the sidecar installed this is
