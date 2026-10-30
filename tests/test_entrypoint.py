@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Add-on entrypoint: the one-shot import of memory and routines from the share.
+"""Add-on entrypoint: options to environment, and the one-shot import from the share.
 
 Run: .venv/bin/python tests/test_entrypoint.py
 """
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -70,8 +72,78 @@ def test_import() -> None:
         check("no inbox, no change", (wiki / "index.md").read_text() == "newer\n")
 
 
+_PASSTHROUGH = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "OPENROUTER_API_KEY",
+                "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USER_IDS", "ASSISTANT_MODEL",
+                "ASSISTANT_SKILLS")
+_BASE = {"telegram_bot_token": "123:abc", "telegram_allowed_user_ids": ["7"],
+         "model": "claude-opus-5", "llm_provider": "claude_subscription"}
+
+
+def _env(tmp: Path, **options) -> dict[str, str] | str:
+    """build_env() over these options, or the SystemExit message."""
+    path = tmp / "options.json"
+    path.write_text(json.dumps({**_BASE, **options}))
+    E.OPTIONS = path
+    try:
+        return E.build_env()
+    except SystemExit as exc:
+        return str(exc)
+
+
+def test_llm() -> None:
+    print("build_env: llm_provider + llm_credential")
+    for name in _PASSTHROUGH:
+        os.environ.pop(name, None)
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        for provider, (variable, prefix) in E.LLM_PROVIDERS.items():
+            model = "deepseek/deepseek-chat" if provider == "openrouter" else "claude-opus-5"
+            env = _env(tmp, llm_provider=provider, llm_credential=f"{prefix}xyz", model=model)
+            others = [v for v, _ in E.LLM_PROVIDERS.values() if v != variable]
+            check(f"{provider} -> {variable}",
+                  isinstance(env, dict) and env.get(variable) == f"{prefix}xyz"
+                  and not any(env.get(o) for o in others), str(env))
+
+        out = _env(tmp, llm_provider="claude_subscription", llm_credential="sk-ant-api03-x")
+        check("api key under subscription refused",
+              isinstance(out, str) and "set llm_provider to anthropic_api" in out, str(out))
+        out = _env(tmp, llm_provider="anthropic_api", llm_credential="hello")
+        check("unknown prefix names the expected one",
+              isinstance(out, str) and "starts with sk-ant-api" in out, str(out))
+        out = _env(tmp, llm_credential="sk-ant-oat-x", anthropic_api_key="sk-ant-api-y")
+        check("new pair beside legacy field refused",
+              isinstance(out, str) and "anthropic_api_key" in out, str(out))
+        out = _env(tmp, llm_provider="", llm_credential="sk-ant-oat-x")
+        check("credential without provider refused",
+              isinstance(out, str) and "Pick one of" in out, str(out))
+        out = _env(tmp, llm_provider="openrouter", llm_credential="sk-or-x")
+        check("openrouter with a non-slug model refused at the entrypoint",
+              isinstance(out, str) and "not an OpenRouter slug" in out, str(out))
+
+        # An install from before the pair: the Supervisor merged the default
+        # provider in, the credential is empty, the old field does the work.
+        env = _env(tmp, claude_oauth_token="sk-ant-oat-old")
+        check("legacy field still works",
+              isinstance(env, dict) and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat-old",
+              str(env))
+        env = _env(tmp, openrouter_api_key="sk-or-old", model="vendor/m")
+        check("legacy openrouter still works",
+              isinstance(env, dict) and env.get("OPENROUTER_API_KEY") == "sk-or-old", str(env))
+        out = _env(tmp)
+        check("no credential at all refused",
+              isinstance(out, str) and "llm_credential" in out, str(out))
+
+        os.environ["ANTHROPIC_API_KEY"] = "sk-ant-api-from-env"
+        env = _env(tmp, llm_credential="sk-ant-oat-x")
+        check("options beat a stale credential in the environment",
+              isinstance(env, dict) and "ANTHROPIC_API_KEY" not in env
+              and env.get("CLAUDE_CODE_OAUTH_TOKEN") == "sk-ant-oat-x", str(env))
+        os.environ.pop("ANTHROPIC_API_KEY")
+
+
 def main() -> int:
     test_import()
+    test_llm()
     if FAILURES:
         print("\n".join(["", "FAILURES:", *FAILURES]))
         return 1

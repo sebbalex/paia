@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.7
+
+- One model credential instead of three: pick llm_provider (claude_subscription, anthropic_api or openrouter) and paste it in llm_credential. A credential that belongs to another provider fails at start, and the Log names the right provider. The old claude_oauth_token / anthropic_api_key / openrouter_api_key fields keep working while llm_credential is empty.
+
 ## 0.3.6
 
 - web_fetch_allowed_domains is optional again, and `*` in it means the open web instead of blocking every site. telegram_allowed_user_ids takes ids as text, so the options form accepts them.

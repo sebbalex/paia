@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.3.6"
+version: "0.3.7"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and
@@ -34,8 +34,8 @@ map:
 options:
   telegram_bot_token: ""
   telegram_allowed_user_ids: []
-  claude_oauth_token: ""
-  openrouter_api_key: ""
+  llm_provider: claude_subscription
+  llm_credential: ""
   openrouter_search_model: ""
   model: claude-opus-5
   owner_name: ""
@@ -65,10 +65,23 @@ schema:
   telegram_allowed_user_ids:
     - str
 
-  # Exactly one of the two. claude_oauth_token comes from `claude setup-token`
-  # and bills against a Claude plan; anthropic_api_key is metered API billing.
-  # They are not interchangeable, and setting both fails at start rather than
-  # silently letting the key shadow the token.
+  # Which model service, and its one credential:
+  #   claude_subscription  `claude setup-token`, sk-ant-oat..., bills a Claude plan
+  #   anthropic_api        console.anthropic.com, sk-ant-api..., metered
+  #   openrouter           openrouter.ai, sk-or-..., `model` must be a slug
+  # docker/entrypoint.py maps the credential to exactly one variable and
+  # refuses one whose prefix says it belongs to another provider.
+  llm_provider: list(claude_subscription|anthropic_api|openrouter)?
+  llm_credential: password?
+
+  # Legacy: the three separate credential fields from before llm_provider.
+  # Kept in the schema so saved options on older installs still validate,
+  # gone from the defaults so a new install never sees them. Filled in
+  # together with llm_credential, the add-on refuses to start.
+  # Exactly one of the two Claude ones. claude_oauth_token comes from
+  # `claude setup-token` and bills against a Claude plan; anthropic_api_key
+  # is metered API billing. They are not interchangeable, and setting both
+  # fails at start rather than silently letting the key shadow the token.
   claude_oauth_token: password?
   anthropic_api_key: password?
   # Or neither: any tool-calling model on OpenRouter. Set this alone, and

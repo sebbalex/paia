@@ -22,9 +22,8 @@ the transcription wheels nor Bun exist for armv7.
 |---|---|---|
 | `telegram_bot_token` | yes | From @BotFather. |
 | `telegram_allowed_user_ids` | yes | Numeric ids from @userinfobot. **This list is the entire access control model** — a message from any other id is dropped before the model sees it. |
-| `claude_oauth_token` | one of two | `claude setup-token` on your laptop, `sk-ant-oat…`. Billed against a Claude plan. |
-| `anthropic_api_key` | one of two | `sk-ant-api…` from console.anthropic.com. Metered. |
-| `openrouter_api_key` | instead of both | `sk-or-…` from openrouter.ai. Runs the assistant on any tool-calling model there instead of Claude: same tools, same policy gate, no claude-mem. `model` must then be an OpenRouter slug, `vendor/model-name`. |
+| `llm_provider` | yes | Which model service: `claude_subscription`, `anthropic_api` or `openrouter`. |
+| `llm_credential` | yes | That service's one credential. `claude_subscription`: `claude setup-token` on your laptop, `sk-ant-oat…`, billed against a Claude plan. `anthropic_api`: console.anthropic.com, `sk-ant-api…`, metered. `openrouter`: openrouter.ai, `sk-or-…`, runs the assistant on any tool-calling model there instead of Claude — same tools, same policy gate, no claude-mem — and `model` must then be an OpenRouter slug, `vendor/model-name`. A credential whose prefix belongs to another provider fails at start and the Log says which provider it is. |
 | `openrouter_search_model` | no | With OpenRouter: the model WebSearch asks. Defaults to `perplexity/sonar`; empty turns WebSearch off. |
 | `openrouter_images` | no | With OpenRouter: off for a model that takes no image input. |
 | `model` | no | Defaults to `claude-opus-5`. With OpenRouter, required and a slug. |
@@ -37,9 +36,10 @@ the transcription wheels nor Bun exist for armv7.
 | `distill_hour` | no | Hour of the night the raw log is promoted into the wiki. Delete the option to turn it off. |
 | `smtp_*` | no | For routines with `channel: email`. Without them such a routine falls back to Telegram rather than losing the result. |
 
-Setting **both** Anthropic credentials fails at start rather than letting the
-API key silently shadow the token — they are different credential types and
-the key takes precedence.
+Installs from before `llm_provider` may still have the old separate fields —
+`claude_oauth_token`, `anthropic_api_key`, `openrouter_api_key`. They keep
+working as long as `llm_credential` is empty. Filling in `llm_credential`
+beside any of them fails at start: move the value over and empty the old one.
 
 ## Where things live
 

@@ -179,6 +179,8 @@ def build_env() -> dict[str, str]:
         if flat is not None:
             env[variable] = flat
 
+    _apply_llm(options, env)
+
     # Both credential types set is the failure .env.example warns about:
     # ANTHROPIC_API_KEY wins and a stale one silently shadows a good token.
     if env.get("ANTHROPIC_API_KEY") and env.get("CLAUDE_CODE_OAUTH_TOKEN"):
@@ -199,10 +201,10 @@ def build_env() -> dict[str, str]:
         )
     if not claude and not env.get("OPENROUTER_API_KEY"):
         raise SystemExit(
-            "no model credential. Fill in claude_oauth_token "
-            "(`claude setup-token`, a subscription), anthropic_api_key "
-            "(console.anthropic.com, metered), or openrouter_api_key with an "
-            "OpenRouter slug in model."
+            "no model credential. Pick llm_provider and fill in llm_credential: "
+            "claude_subscription (`claude setup-token`, sk-ant-oat...), "
+            "anthropic_api (console.anthropic.com, sk-ant-api...), or "
+            "openrouter (openrouter.ai, sk-or-..., with an OpenRouter slug in model)."
         )
     # Checked here rather than left to assistant/config.py: _require() there
     # raises inside the supervised child, which would restart on a five second
@@ -217,7 +219,63 @@ def build_env() -> dict[str, str]:
                 f"telegram_allowed_user_ids: '{raw.strip()}' is not a numeric "
                 "Telegram user id -- @userinfobot tells you yours"
             )
+    # assistant/config.py makes the same check, but inside the supervised
+    # child, where it would restart every five seconds instead of saying why.
+    if env.get("OPENROUTER_API_KEY") and "/" not in env.get("ASSISTANT_MODEL", ""):
+        raise SystemExit(
+            f"model is '{env.get('ASSISTANT_MODEL', '')}', which is not an "
+            "OpenRouter slug. With OpenRouter set model to vendor/model-name, "
+            "e.g. deepseek/deepseek-chat."
+        )
     return env
+
+
+# llm_provider -> the one variable its credential lands in, and the prefix
+# that credential carries. Anthropic's two share `sk-ant-`, so the full
+# prefix is what tells a subscription token from a metered key.
+LLM_PROVIDERS = {
+    "claude_subscription": ("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat"),
+    "anthropic_api": ("ANTHROPIC_API_KEY", "sk-ant-api"),
+    "openrouter": ("OPENROUTER_API_KEY", "sk-or-"),
+}
+_LEGACY_CREDENTIALS = ("claude_oauth_token", "anthropic_api_key", "openrouter_api_key")
+
+
+def _apply_llm(options: dict, env: dict[str, str]) -> None:
+    """Map llm_provider + llm_credential onto exactly one variable.
+
+    The pair counts only once llm_credential is filled in. The Supervisor
+    merges new defaults into saved options, so an install from before the
+    pair arrives here with llm_provider set and no credential -- that is the
+    legacy path, and the three old fields keep working untouched.
+    """
+    credential = _flatten(options.get("llm_credential"))
+    if credential is None:
+        return
+    provider = _flatten(options.get("llm_provider"))
+    if provider not in LLM_PROVIDERS:
+        raise SystemExit(
+            f"llm_provider is '{provider or ''}'. Pick one of: "
+            f"{', '.join(LLM_PROVIDERS)}."
+        )
+    legacy = [name for name in _LEGACY_CREDENTIALS if _flatten(options.get(name))]
+    if legacy:
+        raise SystemExit(
+            f"llm_credential is filled in and so is {', '.join(legacy)}. "
+            "llm_credential replaces the old fields: empty them and keep one."
+        )
+    variable, prefix = LLM_PROVIDERS[provider]
+    if not credential.startswith(prefix):
+        owner = next((name for name, (_, p) in LLM_PROVIDERS.items()
+                      if credential.startswith(p)), None)
+        hint = (f"It looks like a credential for {owner}: set llm_provider to {owner}."
+                if owner else f"A {provider} credential starts with {prefix}.")
+        raise SystemExit(f"llm_credential does not match llm_provider {provider}. {hint}")
+    # The process environment may still carry a credential of another kind;
+    # the options say which one this install uses.
+    for other, _ in LLM_PROVIDERS.values():
+        env.pop(other, None)
+    env[variable] = credential
 
 
 # -- seeding ---------------------------------------------------------------
