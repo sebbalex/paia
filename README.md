@@ -341,7 +341,8 @@ likely to break a build.
 Threat model and the full control stack: **SECURITY.md**. Summary:
 
 - `TELEGRAM_ALLOWED_USER_IDS` is the whole access control model. It is checked
-  against numeric ids before the model is invoked. Get yours from @userinfobot.
+  against numeric ids before the model is invoked. Get yours from @userinfobot,
+  or leave the list empty and pair with the code the log prints (`assistant/pairing.py`).
 - `Bash` is in `disallowed_tools`. Enabling it turns any message into remote
   code execution on the box — do that only behind a `can_use_tool` callback.
 - `.env` is `chmod 600` and never committed.

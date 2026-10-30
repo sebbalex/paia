@@ -113,7 +113,7 @@ async def test_read_round_trip(failures: list[str]) -> None:
     if "Bash" in names:
         failures.append("Bash offered")
     system = first["messages"][0]["content"]
-    for needle in ("You are terse.", "- coach: The owner's cycling coach", "Untrusted content"):
+    for needle in ("You are terse.", "- coach: The owner's endurance coach", "Untrusted content"):
         if needle not in system:
             failures.append(f"system prompt lacks {needle!r}")
     saved = json.loads((root / "state" / "openrouter" / "history.json").read_text())

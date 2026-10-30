@@ -267,7 +267,15 @@ class Config:
 
 def load() -> Config:
     root = Path(os.environ.get("ASSISTANT_ROOT", Path(__file__).resolve().parent.parent))
-    ids = _require("TELEGRAM_ALLOWED_USER_IDS")
+    # Optional: with none, the transport opens pairing (assistant/pairing.py)
+    # and the owner proves themselves with a code from the log instead.
+    ids = os.environ.get("TELEGRAM_ALLOWED_USER_IDS", "").replace(" ", "")
+    bad = [x for x in ids.split(",") if x and not x.isdigit()]
+    if bad:
+        raise SystemExit(
+            f"TELEGRAM_ALLOWED_USER_IDS: '{bad[0]}' is not a numeric Telegram "
+            "user id. Leave it empty to pair from the chat instead."
+        )
     domains = os.environ.get("WEB_FETCH_ALLOWED_DOMAINS", "").strip()
     language = os.environ.get("WHISPER_LANGUAGE", "").strip()
     folders = os.environ.get("DRIVE_ALLOWED_FOLDERS", "").strip()
@@ -319,7 +327,7 @@ def load() -> Config:
             d.strip().lower() for d in domains.split(",") if d.strip()
         ) if "*" not in domains.replace(" ", "").split(",") else frozenset(),
         bot_token=_require("TELEGRAM_BOT_TOKEN"),
-        allowed_user_ids=frozenset(int(x) for x in ids.replace(" ", "").split(",") if x),
+        allowed_user_ids=frozenset(int(x) for x in ids.split(",") if x),
         model=model or "claude-sonnet-5",
         backend="openrouter" if openrouter_key else "claude",
         openrouter_api_key=openrouter_key,

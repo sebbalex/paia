@@ -20,6 +20,7 @@ from . import memory
 from . import routines as routines_module
 from .agent import Brain, make_brain
 from .channels import Delivery, GwsMailer
+from .pairing import Pairing
 from .speech import Transcriber
 from .telegram import Incoming, Telegram
 
@@ -35,7 +36,13 @@ async def run() -> None:
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
 
     brain = make_brain(cfg)
-    telegram = Telegram(cfg.bot_token, cfg.allowed_user_ids)
+    # The ids in the options win outright; only without them does the id
+    # paired earlier count. That keeps the options the one place an admin
+    # can take access away. With neither, pairing opens and its code goes to
+    # the log, nowhere else.
+    pairing = Pairing(cfg.state_dir, configured=cfg.allowed_user_ids)
+    owners = cfg.allowed_user_ids or pairing.owners()
+    telegram = Telegram(cfg.bot_token, owners, pairing)
     transcriber = Transcriber(
         model_name=cfg.whisper_model,
         compute_type=cfg.whisper_compute_type,
@@ -50,7 +57,7 @@ async def run() -> None:
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, stop.set)
 
-    chat_id = next(iter(sorted(cfg.allowed_user_ids)))
+    chat_id = min(owners) if owners else None
     mailer = GwsMailer(cfg.gws_bin, cfg.mail_to) if cfg.mail_to else None
     delivery = Delivery(telegram, chat_id, cfg.smtp, mailer)
 
@@ -64,7 +71,10 @@ async def run() -> None:
         _pump(cfg, telegram, brain, transcriber, delivery)
     )
 
-    log.info("listening (allowed user ids: %s)", sorted(cfg.allowed_user_ids))
+    if pairing.open:
+        log.warning("no owner yet: pairing is open, the code is above")
+    else:
+        log.info("listening (allowed user ids: %s)", sorted(owners))
     await stop.wait()
     log.info("shutting down")
 
@@ -80,6 +90,10 @@ async def run() -> None:
 async def _pump(cfg, telegram: Telegram, brain: Brain,
                 transcriber: Transcriber, delivery: Delivery) -> None:
     async for incoming in telegram.poll():
+        if incoming.paired:
+            delivery.set_chat(incoming.chat_id)
+            await telegram.send(incoming.chat_id, PAIRED)
+            continue
         if incoming.text.startswith("/"):
             if await _command(cfg, telegram, brain, delivery, incoming):
                 continue
@@ -126,6 +140,10 @@ HELP = "Commands:\n\n" + "\n".join(
 To create one, just talk to me: tell me what to do and when. I write it
 disabled, then you enable it with /enable."""
 
+# Sent once, to the chat that just paired: it is the first thing the owner
+# reads from the bot, so it says what happened and what comes next.
+PAIRED = "Paired: this chat is the owner's now, and pairing is closed.\n\n" + HELP
+
 
 async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
                    incoming: Incoming) -> bool:
@@ -136,7 +154,8 @@ async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
     execution.
     """
     parts = incoming.text.strip().split(maxsplit=1)
-    command = parts[0].lower().lstrip("/")
+    # "/help@paia_bot" is what a tap on the menu sends in some clients.
+    command = parts[0].lower().lstrip("/").split("@", 1)[0]
     argument = parts[1].strip() if len(parts) > 1 else ""
 
     if command in ("help", "start"):

@@ -133,6 +133,16 @@ def test_llm() -> None:
         check("no credential at all refused",
               isinstance(out, str) and "llm_credential" in out, str(out))
 
+        env = _env(tmp, llm_credential="sk-ant-oat-x", telegram_allowed_user_ids=[])
+        check("empty allowlist starts: pairing takes over",
+              isinstance(env, dict) and not env.get("TELEGRAM_ALLOWED_USER_IDS"), str(env))
+        out = _env(tmp, llm_credential="sk-ant-oat-x", telegram_allowed_user_ids=["@me"])
+        check("a non-numeric id still refused",
+              isinstance(out, str) and "not a numeric" in out, str(out))
+        out = _env(tmp, llm_credential="sk-ant-oat-x", telegram_bot_token="")
+        check("an empty bot token still refused",
+              isinstance(out, str) and "telegram_bot_token" in out, str(out))
+
         os.environ["ANTHROPIC_API_KEY"] = "sk-ant-api-from-env"
         env = _env(tmp, llm_credential="sk-ant-oat-x")
         check("options beat a stale credential in the environment",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8
+
+- Pair instead of looking up your Telegram id: leave telegram_allowed_user_ids empty, find `PAIRING CODE` in the Log tab, send it to the bot. That chat becomes the owner and pairing closes. Ids in the options still work and replace a paired owner.
+
 ## 0.3.7
 
 - One model credential instead of three: pick llm_provider (claude_subscription, anthropic_api or openrouter) and paste it in llm_credential. A credential that belongs to another provider fails at start, and the Log names the right provider. The old claude_oauth_token / anthropic_api_key / openrouter_api_key fields keep working while llm_credential is empty.

@@ -209,15 +209,17 @@ def build_env() -> dict[str, str]:
     # Checked here rather than left to assistant/config.py: _require() there
     # raises inside the supervised child, which would restart on a five second
     # loop and bury the reason in the log.
-    for variable, option in (("TELEGRAM_BOT_TOKEN", "telegram_bot_token"),
-                             ("TELEGRAM_ALLOWED_USER_IDS", "telegram_allowed_user_ids")):
-        if not env.get(variable):
-            raise SystemExit(f"option '{option}' is empty and the add-on cannot start without it")
-    for raw in env["TELEGRAM_ALLOWED_USER_IDS"].split(","):
-        if not raw.strip().isdigit():
+    if not env.get("TELEGRAM_BOT_TOKEN"):
+        raise SystemExit("option 'telegram_bot_token' is empty and the add-on "
+                         "cannot start without it")
+    # Empty is fine: the assistant opens pairing and prints its code in the
+    # Log tab (assistant/pairing.py). Filled in, every entry must be an id.
+    for raw in env.get("TELEGRAM_ALLOWED_USER_IDS", "").split(","):
+        if raw.strip() and not raw.strip().isdigit():
             raise SystemExit(
                 f"telegram_allowed_user_ids: '{raw.strip()}' is not a numeric "
-                "Telegram user id -- @userinfobot tells you yours"
+                "Telegram user id. Leave the list empty to pair from the chat "
+                "with the code the Log tab shows."
             )
     # assistant/config.py makes the same check, but inside the supervised
     # child, where it would restart every five seconds instead of saying why.

@@ -62,6 +62,9 @@ def main() -> int:
     check("read .env", *verdict("Read", file_path=".env")[:1], want=False)
     check("read .env via subpath", *verdict("Read", file_path="./.env")[:1], want=False)
     check("read session id", *verdict("Read", file_path="state/session_id")[:1], want=False)
+    check("read paired owner", *verdict("Read", file_path="state/owner.json")[:1], want=False)
+    check("write paired owner", *verdict("Write", file_path="state/owner.json",
+                                         content="{}")[:1], want=False)
     check("read git internals", *verdict("Read", file_path=".git/config")[:1], want=False)
     check("read a key file", *verdict("Read", file_path="memory/wiki/tls.pem")[:1], want=False)
 

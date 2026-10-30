@@ -9,9 +9,15 @@ systemd.
 
 1. Settings → Add-ons → Add-on Store → ⋮ → **Repositories**, add
    `https://github.com/sebbalex/paia`.
-2. Install **PAIA**, fill in the options below, start it.
+2. Install **PAIA**, fill in the bot token, `llm_provider` and
+   `llm_credential`, start it.
 3. Watch the **Log** tab. First start seeds `/data` and installs claude-mem,
    so it takes a couple of minutes before the bot answers.
+4. Find the line `PAIRING CODE: 123456` in the Log and send those six digits
+   to your bot in a private chat. That chat becomes the owner and pairing
+   closes for good. The code lasts 10 minutes (a message after that puts a
+   fresh one in the Log); five wrong codes close pairing until the next
+   restart.
 
 Requires a 64-bit system. A 32-bit Raspberry Pi OS is not supported: neither
 the transcription wheels nor Bun exist for armv7.
@@ -21,7 +27,7 @@ the transcription wheels nor Bun exist for armv7.
 | Option | Required | What it is |
 |---|---|---|
 | `telegram_bot_token` | yes | From @BotFather. |
-| `telegram_allowed_user_ids` | yes | Numeric ids from @userinfobot. **This list is the entire access control model** — a message from any other id is dropped before the model sees it. |
+| `telegram_allowed_user_ids` | no | Leave empty and pair with the code from the Log (Install, step 4). Filled in, these numeric ids are the allowlist and pairing never opens; they also **replace** a paired owner, which is how you take access away. Either way **the allowed ids are the entire access control model** — a message from any other id is dropped before the model sees it. |
 | `llm_provider` | yes | Which model service: `claude_subscription`, `anthropic_api` or `openrouter`. |
 | `llm_credential` | yes | That service's one credential. `claude_subscription`: `claude setup-token` on your laptop, `sk-ant-oat…`, billed against a Claude plan. `anthropic_api`: console.anthropic.com, `sk-ant-api…`, metered. `openrouter`: openrouter.ai, `sk-or-…`, runs the assistant on any tool-calling model there instead of Claude — same tools, same policy gate, no claude-mem — and `model` must then be an OpenRouter slug, `vendor/model-name`. A credential whose prefix belongs to another provider fails at start and the Log says which provider it is. |
 | `openrouter_search_model` | no | With OpenRouter: the model WebSearch asks. Defaults to `perplexity/sonar`; empty turns WebSearch off. |

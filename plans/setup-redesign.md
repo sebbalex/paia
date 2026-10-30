@@ -111,7 +111,14 @@ Tests are plain scripts, not pytest. Each has a `check(name, ok, detail)` helper
 
 ---
 
-## Phase 2 — Telegram pairing
+## Phase 2 — Telegram pairing (done 2026-10-30)
+
+Deviations from the steps below, as built:
+- A non-empty option allowlist **replaces** `owner.json` rather than being unioned with it, so the options stay the one place to revoke access.
+- Text that is not six digits costs no attempt ("hi" from the owner must not burn the five).
+- An expired code rotates (a new one is logged) instead of closing.
+- The pairing message is yielded as `Incoming(paired=True, text="")`. `_pump` sets the delivery chat and greets; Phase 4 hooks onboarding there.
+- Also fixed: `tests/test_openrouter.py` expected the old "cycling coach" description. `test_policy.py` "public host allowed" fails only without DNS: environmental, left as it is.
 
 **Implement**
 

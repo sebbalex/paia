@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.3.7"
+version: "0.3.8"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and
@@ -55,15 +55,16 @@ options:
 
 schema:
   # -- required ----------------------------------------------------------
-  # @BotFather gives the token, @userinfobot gives the numeric id. That list
-  # is the whole access control model: a message from any other id is dropped
-  # by the transport before the model ever sees it. Strings, not int: the
-  # UI's list editor saves what is typed as text, and a list of int rejected
-  # it. Older installs holding bare numbers still pass, coerced to str, and
-  # docker/entrypoint.py refuses anything that is not all digits.
+  # @BotFather gives the token. The id list is optional: left empty, the
+  # assistant prints a pairing code in the Log tab and the first private chat
+  # that sends it becomes the owner (stored in /data, closed after that).
+  # Filled in, it is the allowlist as before, and pairing never opens. Either
+  # way a message from any other id is dropped by the transport before the
+  # model sees it. Strings, not int: the UI's list editor saves what is typed
+  # as text. docker/entrypoint.py refuses anything that is not all digits.
   telegram_bot_token: password
   telegram_allowed_user_ids:
-    - str
+    - str?
 
   # Which model service, and its one credential:
   #   claude_subscription  `claude setup-token`, sk-ant-oat..., bills a Claude plan

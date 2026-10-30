@@ -260,6 +260,30 @@ Note that this hook is a *hook*, not a `can_use_tool` callback, and that
 in `TELEGRAM_ALLOWED_USER_IDS` are dropped before the model is invoked.
 Numeric ids only — usernames are re-assignable.
 
+**Pairing** (`assistant/pairing.py`). With `TELEGRAM_ALLOWED_USER_IDS` empty
+and no owner paired before, the process logs a six-digit code from
+`secrets` and the first *private* chat that sends it becomes the owner,
+saved to `state/owner.json`. The argument for it: reading the process log
+needs the same access as editing the allowlist, so pairing hands nobody a
+power they lacked. What holds it to that:
+
+- the code exists only in the log: never sent to Telegram, never in
+  `memory/raw`, never in a prompt; the stranger's text is compared with
+  `hmac.compare_digest` and dropped;
+- single use: the first success closes pairing for the install, a restart
+  does not reopen it while `state/owner.json` holds an id;
+- five wrong six-digit guesses close it until restart; text that is not six
+  digits costs no attempt and gets one fixed hint per sender per minute;
+- the code rotates after 10 minutes;
+- group chats cannot pair;
+- `state/` is unreadable and unwritable to every tool (`_SECRET_DIRS`);
+- a non-empty `TELEGRAM_ALLOWED_USER_IDS` replaces the paired owner rather
+  than adding to it, so the options stay the one place to revoke access.
+
+What it does not cover: an install that sits unpaired with its log readable
+by someone who should not own it. Pair right after the first start, or set
+the ids in the options.
+
 **systemd sandbox** (`deploy/paia.service`). The same shape enforced
 by the kernel rather than by our own code: `ReadOnlyPaths` covers the whole
 install, `ReadWritePaths` grants only `memory/` and `state/`. If the policy

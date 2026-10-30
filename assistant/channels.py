@@ -79,12 +79,25 @@ class GwsMailer:
 class Delivery:
     """Route a message to the requested channel."""
 
-    def __init__(self, telegram, chat_id: int, smtp: SmtpConfig,
+    def __init__(self, telegram, chat_id: int | None, smtp: SmtpConfig,
                  mailer: GwsMailer | None = None) -> None:
         self._telegram = telegram
+        # None until pairing finds the owner (assistant/pairing.py): there is
+        # nobody to deliver to yet, and nothing is enabled to deliver anyway.
         self._chat_id = chat_id
         self._smtp = smtp
         self._mailer = mailer
+
+    def set_chat(self, chat_id: int) -> None:
+        self._chat_id = chat_id
+
+    async def _to_chat(self, text: str, photos: list | None = None) -> None:
+        if self._chat_id is None:
+            log.warning("no owner chat yet (pairing open): message not delivered")
+            return
+        await self._telegram.send(self._chat_id, text)
+        if photos:
+            await self._telegram.send_photos(self._chat_id, photos)
 
     def available(self, channel: str) -> bool:
         if channel == "telegram":
@@ -117,12 +130,10 @@ class Delivery:
             # that runs and delivers nothing is worse than one that delivers
             # somewhere else.
             body += "\n\n_(SMTP not configured, sent here instead)_"
-        await self._telegram.send(self._chat_id, f"**{subject}**\n\n{body}")
-        if charts:
-            await self._telegram.send_photos(
-                self._chat_id,
-                [(c.filename, c.png, f"Grafico {i}: {c.title}") for i, c in enumerate(charts, 1)],
-            )
+        await self._to_chat(
+            f"**{subject}**\n\n{body}",
+            [(c.filename, c.png, f"Grafico {i}: {c.title}") for i, c in enumerate(charts, 1)],
+        )
 
     async def send_built(self, channel: str, build, text: str, charts=()) -> None:
         """Mail a message `build(sender, recipient)` makes; on Telegram, or if
@@ -140,10 +151,7 @@ class Delivery:
             except Exception:
                 log.exception("mail failed, falling back to Telegram")
                 text += "\n\n_(invio email fallito, mandato qui)_"
-        await self._telegram.send(self._chat_id, text)
-        if charts:
-            await self._telegram.send_photos(
-                self._chat_id, [(c.filename, c.png, c.title) for c in charts])
+        await self._to_chat(text, [(c.filename, c.png, c.title) for c in charts])
 
     def _send_email(self, subject: str, body: str, charts=()) -> None:
         self._smtp_send(build_email(subject, body, self._smtp.sender, self._smtp.recipient, charts))

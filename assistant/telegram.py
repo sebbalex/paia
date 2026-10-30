@@ -4,6 +4,10 @@ Security note: the allowlist check below is the only thing standing between a
 stranger on the internet and an agent with filesystem access. It runs before
 the model is ever invoked, and it compares numeric user ids — never usernames,
 which are re-assignable, and never anything found in the message body.
+
+The one exception is pairing (assistant/pairing.py): while an install has no
+owner, a stranger's text is compared against a code printed in the process
+log, and nothing else is done with it. It never reaches the model.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -19,6 +24,7 @@ from pathlib import Path
 import httpx
 
 from .format import to_telegram_html
+from .pairing import Pairing
 
 log = logging.getLogger(__name__)
 
@@ -47,18 +53,33 @@ class Incoming:
     text: str
     voice: Voice | None = None
     document: Document | None = None
+    # Set on the one message that paired its sender: the transport yields it
+    # so the caller can greet the new owner, not so the model reads the code.
+    paired: bool = False
 
 
 class Telegram:
-    def __init__(self, token: str, allowed_user_ids: frozenset[int]) -> None:
+    # How often a stranger is told where the code is, at most: a reply to
+    # every message would let anyone make the bot talk on demand.
+    PAIRING_HINT_SECONDS = 60
+    PAIRING_HINT = "Send the pairing code shown in the add-on Log tab."
+
+    def __init__(self, token: str, allowed_user_ids: frozenset[int] | set[int],
+                 pairing: Pairing | None = None) -> None:
         self._base = f"https://api.telegram.org/bot{token}"
         self._file_base = f"https://api.telegram.org/file/bot{token}"
-        self._allowed = allowed_user_ids
+        # Mutable only so pairing can add the owner; nothing else calls allow().
+        self._allowed = set(allowed_user_ids)
+        self._pairing = pairing
+        self._hinted: dict[int, float] = {}
         self._offset: int | None = None
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(65.0, connect=10.0))
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    def allow(self, user_id: int) -> None:
+        self._allowed.add(user_id)
 
     async def _call(self, method: str, **params) -> dict:
         response = await self._client.post(f"{self._base}/{method}", json=params)
@@ -99,6 +120,9 @@ class Telegram:
                 # Allowlist first, always: nothing below this line -- not a
                 # download, not a transcription -- runs for a stranger.
                 if sender not in self._allowed:
+                    if await self._pair(message, sender, chat):
+                        yield Incoming(chat_id=chat, user_id=sender, text="", paired=True)
+                        continue
                     log.warning("dropped message from unauthorised user id %s", sender)
                     continue
 
@@ -136,6 +160,27 @@ class Telegram:
                         ),
                     )
                     break
+
+    async def _pair(self, message: dict, sender: int, chat: int) -> bool:
+        """A stranger while pairing is open: their text against the code.
+
+        Private chats only -- in a group the code would sit in front of every
+        member. The text is compared and dropped; it is never yielded.
+        """
+        if self._pairing is None or not self._pairing.open:
+            return False
+        if (message.get("chat") or {}).get("type") != "private":
+            return False
+        if self._pairing.try_pair(sender, message.get("text") or ""):
+            self.allow(sender)
+            return True
+        if not self._pairing.open:
+            return False
+        now = time.monotonic()
+        if now - self._hinted.get(sender, -self.PAIRING_HINT_SECONDS) >= self.PAIRING_HINT_SECONDS:
+            self._hinted[sender] = now
+            await self.send(chat, self.PAIRING_HINT)
+        return False
 
     async def send(self, chat_id: int, text: str) -> None:
         # The split happens on the markdown, not the HTML: cutting HTML
