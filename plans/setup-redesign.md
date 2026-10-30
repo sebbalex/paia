@@ -258,7 +258,7 @@ As built:
 
 ---
 
-## Phase 5 — Docs and release
+## Phase 5 — Docs and release (done 2026-10-30)
 
 - `addon/DOCS.md`:
   - Install becomes: bot token + provider + credential → start → copy the code from Log → send it to the bot → answer its questions.

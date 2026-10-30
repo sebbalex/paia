@@ -151,7 +151,9 @@ sudo -u assistant npx claude-mem install
 
 The same process, packaged so a Supervisor keeps it alive instead of systemd.
 Add `https://github.com/sebbalex/paia` as an add-on repository, fill
-in the options, start it. Install and configuration: **`addon/DOCS.md`**.
+in three options (bot token, `llm_provider`, `llm_credential`), start it,
+and send the bot the pairing code from the Log tab; it interviews you from
+there. Install and configuration: **`addon/DOCS.md`**.
 
 ```
 Dockerfile              node:22-bookworm-slim + Python venv + claude/gws/claude-mem CLIs

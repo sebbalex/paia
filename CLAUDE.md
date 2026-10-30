@@ -53,4 +53,10 @@ lays it out as a designed email with numbers, trend charts and a profile per
 key session. Skills are live: `.claude/skills/` holds the
 methods, `ASSISTANT_SKILLS` says which ones are switched on: `price-hunt` for
 prices, `adventure-log` for the trip documents in Drive, `trip-design` for
-turning a trip idea into one of those documents, `coach` for training. Notes not built yet.
+turning a trip idea into one of those documents, `coach` for training.
+Setup is chat-first: an install with no allowlist pairs its owner with a code
+from the log (`assistant/pairing.py`), pairing starts the onboarding
+interview (`assistant/onboarding.py`, `/onboard`), and brief changes are
+proposals in `memory/wiki/proposals/` that the owner applies with
+`/review` and `/accept` (`assistant/proposals.py`; add-on only, a VPS copies
+by hand). Notes not built yet.

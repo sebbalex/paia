@@ -18,6 +18,12 @@ systemd.
    closes for good. The code lasts 10 minutes (a message after that puts a
    fresh one in the Log); five wrong codes close pairing until the next
    restart.
+5. Answer its questions. Pairing starts the interview: one topic at a time,
+   your lists filed as you go, brief changes sent back as proposals you
+   `/review` and `/accept`. `skip` and `stop` work; `/onboard` resumes.
+
+That is the whole setup. Google Workspace, the coach's Intervals.icu keys,
+mail and Drive folders are optional and can come later.
 
 Requires a 64-bit system. A 32-bit Raspberry Pi OS is not supported: neither
 the transcription wheels nor Bun exist for armv7.
@@ -33,6 +39,8 @@ the transcription wheels nor Bun exist for armv7.
 | `openrouter_search_model` | no | With OpenRouter: the model WebSearch asks. Defaults to `perplexity/sonar`; empty turns WebSearch off. |
 | `openrouter_images` | no | With OpenRouter: off for a model that takes no image input. |
 | `model` | no | Defaults to `claude-opus-5`. With OpenRouter, required and a slug. |
+| `owner_name` | no | Your first name, so the assistant says it instead of "the owner". |
+| `owner_language` | no | The language it answers you in and writes your documents in. Defaults to English. |
 | `skills` | no | Which methods in `.claude/skills/` are live. A skill not named here is invisible to the assistant and refused if it names one anyway. |
 | `drive_allowed_folders` | no | Google Drive folder ids the assistant may read, plus everything beneath them. **Empty means the whole Drive**, which is the old behaviour and not a safe default. |
 | `drive_write_folders` | no | The folders Google Docs may be written in, one id or a comma-separated list: a new Doc lands in one of the folders itself (`drive_create_doc`, which names the folder in `folder_id` when several are listed), and a Doc in one of them or in any folder beneath one can be added to at its end (`drive_append_doc`), corrected one exact string at a time (`drive_replace_text`) or rewritten whole from new Markdown (`drive_rewrite_doc`). The last two are the only ones that destroy text: the range they delete is computed from the document rather than passed in, a rewrite refuses a document holding a table or an image, both are pinned to the revision they read, and Google's version history keeps what they replaced. No file is ever deleted, renamed, moved or shared. Must also appear in `drive_allowed_folders`. Everything but creating also needs the Docs API (`docs.googleapis.com`) enabled in the Cloud project. Empty means nothing is ever written at Drive. |
@@ -54,12 +62,13 @@ reinstalls-with-keep-data. The assistant's root is `/data/paia`:
 
 ```
 memory/wiki/     what it understood — authoritative, and yours to read
+memory/wiki/proposals/  brief changes waiting for /review and /accept
 memory/raw/      every exchange, verbatim, append-only
 routines/        scheduled prompts, with the enabled flag you set via /enable
 .claude/skills/  methods it wrote
 models/          Whisper weights, downloaded on the first voice note
 inbox/           attachments you sent it, swept after 7 days
-state/           session id and the tool audit log
+state/           session id, the tool audit log, the paired owner
 ```
 
 Everything else in that tree — the code, `IDENTITY.md`, `ROT.md`, `CLAUDE.md`
@@ -174,11 +183,17 @@ In the Telegram chat:
 /enable <name>     enable a routine
 /disable <name>    suspend one
 /run <name>        run it now
-/help              this list
+/onboard [topic]   the interview, all topics or one
+/proposals         brief changes waiting for you
+/review <brief>    the diff of one
+/accept <brief>    apply it, as reviewed
+/reject <brief>    discard it
+/help              this list, and how many TO FILL lines are open
 ```
 
-The assistant writes routines with `enabled: false` and cannot flip that flag.
-Activation is yours.
+The assistant writes routines with `enabled: false` and cannot flip that flag,
+and proposes briefs it cannot apply. Activation and acceptance are yours:
+these commands are handled before the model sees the message.
 
 ## Resources
 

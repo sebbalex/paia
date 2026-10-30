@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.11
+
+- Docs: the install is now five steps (three options, start, pair, answer), and the Commands section lists /onboard, /proposals, /review, /accept and /reject. owner_name and owner_language are documented.
+
 ## 0.3.10
 
 - The first conversation starts itself: right after pairing the bot interviews you one topic at a time, files the lists, and turns brief answers into proposals for /review and /accept. /onboard starts it again, /onboard <topic> covers one; /help says how many TO FILL lines are still open. The laptop wizard's --addon mode is gone: nothing to mount, nothing to paste.
