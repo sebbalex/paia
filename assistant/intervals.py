@@ -1302,12 +1302,20 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
             return _fail("that week is more than three weeks ahead")
         try:
             evs, m1 = await icu.events(monday, sunday, today)
-            acts, m2 = await icu.activities(monday, min(sunday, today), today)
-            rows, m3 = await icu.wellness(monday, min(sunday, today), today)
+            metas = [m1]
+            acts: Any = []
+            rows: Any = []
+            # A week not started yet has no rides and no wellness, and asking
+            # for them would send newest (today) before oldest (its Monday):
+            # Intervals answers that with a 422, which hid next week's plan.
+            if monday <= today:
+                acts, m2 = await icu.activities(monday, min(sunday, today), today)
+                rows, m3 = await icu.wellness(monday, min(sunday, today), today)
+                metas += [m2, m3]
         except IntervalsError as exc:
             return _fail(str(exc))
         return _text(
-            week(raw, evs or [], acts or [], rows or [], today), _merge_meta(m1, m2, m3)
+            week(raw, evs or [], acts or [], rows or [], today), _merge_meta(*metas)
         )
 
     @tool(

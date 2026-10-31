@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.13
+
+- Coach: next week's calendar can be read again. Asking for a week that had not started yet failed with HTTP 422, so the coach could not see or plan the coming week.
+
 ## 0.3.12
 
 - Coach: confirming a workout you already saw in a preview no longer gets refused for not re-reading the coaching protocol first, which cost a round-trip on every "yes".

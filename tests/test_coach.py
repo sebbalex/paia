@@ -439,6 +439,21 @@ def test_tools() -> None:
     check("refused before any request", fake.requests, 1)
     out = asyncio.run(tools["coach_week"].handler({"week": "2027-W40"}))
     check("far-future week refused", out.get("is_error"), True)
+
+    # Next week: only its calendar exists. Intervals refuses newest < oldest.
+    class Strict(FakeIntervals):
+        async def _request(self, path, params):
+            if params.get("newest", "9") < params.get("oldest", "0"):
+                raise IntervalsError("Intervals.icu answered HTTP 422")
+            return await super()._request(path, params)
+    nxt = (TODAY + timedelta(days=7)).isocalendar()
+    strict = Strict(Path(tempfile.mkdtemp(prefix="icu-")),
+                    [[{"id": 1, "category": "WORKOUT", "name": "VO2",
+                       "start_date_local": f"{TODAY + timedelta(days=7)}T00:00:00"}]])
+    week_tool = {t.name: t for t in build_tools(strict, clock=lambda: TODAY)}["coach_week"]
+    out = asyncio.run(week_tool.handler({"week": f"{nxt[0]}-W{nxt[1]:02d}"}))
+    check("next week readable", out.get("is_error"), None)
+    check("next week asks for its calendar only", strict.requests, 1)
     check("key never in tool output", "key" in json.dumps(body).replace("_key", ""), False)
 
 
