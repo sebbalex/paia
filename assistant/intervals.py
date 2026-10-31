@@ -233,7 +233,14 @@ class Intervals:
         if response.status_code == 404:
             raise IntervalsError("Intervals.icu has no such record")
         if response.status_code >= 400:
-            raise IntervalsError(f"Intervals.icu answered HTTP {response.status_code}")
+            # A 4xx on a write says what it rejected (a 422 names the field);
+            # without that text the model can only report a number and retry
+            # the same body. Truncated, and the key never appears in it.
+            detail = " ".join(response.text.split())[:300] if 400 <= response.status_code < 500 else ""
+            raise IntervalsError(
+                f"Intervals.icu answered HTTP {response.status_code}"
+                + (f": {detail}" if detail else "")
+            )
         try:
             return response.json()
         except ValueError:

@@ -393,6 +393,30 @@ def test_client() -> None:
     except IntervalsError as exc:
         check("backoff without cache fails", "rate-limited" in str(exc), True)
 
+    # A rejected write says why: Intervals names the field in a 4xx body.
+    import httpx
+    real = httpx.AsyncClient
+    answers = {"POST": (422, '{"error":  "Invalid\n workout step"}'), "GET": (500, "trace")}
+    def mock(**kw):
+        return real(transport=httpx.MockTransport(
+            lambda req: httpx.Response(answers[req.method][0], text=answers[req.method][1])), **kw)
+    httpx.AsyncClient = mock
+    try:
+        client = Intervals("key", "i0", Path(tempfile.mkdtemp(prefix="icu-")))
+        try:
+            asyncio.run(client.save_workout({"name": "x"}))
+            check("422 raises", False, True)
+        except IntervalsError as exc:
+            check("422 carries Intervals' reason", str(exc),
+                  'Intervals.icu answered HTTP 422: {"error": "Invalid workout step"}')
+        try:
+            asyncio.run(client._request("/y", {}))
+            check("500 raises", False, True)
+        except IntervalsError as exc:
+            check("5xx body not repeated", str(exc), "Intervals.icu answered HTTP 500")
+    finally:
+        httpx.AsyncClient = real
+
 
 def test_tools() -> None:
     print("tools")
@@ -566,6 +590,17 @@ def test_gate() -> None:
     check("preview allowed", policy.check(plan, args).allow, True)
     check("confirm in the preview's own turn refused",
           policy.check(plan, {**args, "confirm": True}).allow, False)
+    policy.begin_turn()
+    check("confirm of a different workout refused before Section 11",
+          policy.check(plan, {**args, "name": "VO2 40/20", "confirm": True}).allow, False)
+    check("preview still needs Section 11",
+          policy.check(plan, {**args, "name": "VO2 40/20"}).allow, False)
+    check("reads still need Section 11",
+          policy.check("mcp__coach__coach_week", {}).allow, False)
+    check("confirm of an earlier preview skips the Section 11 read",
+          policy.check(plan, {**args, "confirm": True}).allow, True)
+    policy.check("Read", {"file_path": str(s11 / "SECTION_11.md")})
+    policy.check(plan, args)
     policy.begin_turn()
     policy.check("Read", {"file_path": str(s11 / "SECTION_11.md")})
     check("confirm of a different workout refused",

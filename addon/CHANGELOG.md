@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.12
+
+- Coach: confirming a workout you already saw in a preview no longer gets refused for not re-reading the coaching protocol first, which cost a round-trip on every "yes".
+- Coach: when Intervals.icu rejects a write (e.g. HTTP 422), the reply now says what it rejected instead of just the status code.
+
 ## 0.3.11
 
 - Docs: the install is now five steps (three options, start, pair, answer), and the Commands section lists /onboard, /proposals, /review, /accept and /reject. owner_name and owner_language are documented.

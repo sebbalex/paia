@@ -180,7 +180,8 @@ _SCRAPE_TOOL = re.compile(
 # workout was previewed in an earlier turn -- so between the preview and the
 # write there is always one message of theirs.
 # The coaching protocol the coach tools answer to. A coach_* call is refused
-# until a file under here has been Read in the same turn (Policy.begin_turn).
+# until a file under here has been Read in the same turn (Policy.begin_turn),
+# except the confirm of a workout previewed in an earlier turn.
 _SECTION_11 = ".claude/skills/coach/references/section-11"
 
 _COACH_TOOL = re.compile(
@@ -312,7 +313,11 @@ class Policy:
 
         if tool.startswith("mcp__coach__"):
             if _COACH_TOOL.match(tool):
-                if not self._section11_read:
+                # The confirm of a workout previewed in an earlier turn is
+                # exempt: the preview already passed this gate, and the confirm
+                # carries the same fields, so re-reading the protocol before
+                # the owner's yes lands only costs a refused call.
+                if not self._section11_read and not self._confirms_preview(tool, tool_input):
                     return Decision(
                         False,
                         "read the Section 11 parts this job needs first "
@@ -387,6 +392,12 @@ class Policy:
         """
         path = Path(os.path.realpath(path))
         return self._inside_root(path) and not self._is_secret(path)
+
+    def _confirms_preview(self, tool: str, tool_input: dict) -> bool:
+        if tool != _COACH_WRITE or not _confirmed(tool_input):
+            return False
+        shown = self._previews.get(_workout_key(tool_input))
+        return shown is not None and shown < self._turn
 
     def _check_plan(self, tool_input: dict) -> Decision:
         """Preview in one turn, write in a later one, never in a routine."""
