@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.14
+
+- The options form names and explains every field. The three old credential fields show as "Legacy" and say to leave them empty in favour of Model provider + Model credential.
+- Upgrading from 0.3.5 or earlier with a Telegram id saved: the form refuses to save with "expected str" until the id is text. Use ⋮ > Edit in YAML and quote it: `- "123456789"`.
+- `scripts/snap-instance.sh` commits and pushes the private instance repo (`context/`, `memory/wiki/`, `routines/`) in one step; `SNAP_NO_PUSH=1` commits only.
+
 ## 0.3.13
 
 - Coach: next week's calendar can be read again. Asking for a week that had not started yet failed with HTTP 422, so the coach could not see or plan the coming week.

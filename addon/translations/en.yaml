@@ -1,0 +1,118 @@
+configuration:
+  telegram_bot_token:
+    name: Telegram bot token
+    description: From @BotFather.
+  telegram_allowed_user_ids:
+    name: Telegram owner id
+    description: >-
+      Optional. Leave empty to pair from the chat with the code the Log tab
+      shows. Filled in, only these ids reach the assistant and pairing never
+      opens.
+  llm_provider:
+    name: Model provider
+    description: >-
+      claude_subscription (a Claude plan), anthropic_api (metered API key) or
+      openrouter (any tool-calling model).
+  llm_credential:
+    name: Model credential
+    description: >-
+      The one credential for the provider above: sk-ant-oat... from
+      `claude setup-token`, sk-ant-api... from console.anthropic.com, or
+      sk-or-... from openrouter.ai.
+  claude_oauth_token:
+    name: "Legacy: Claude OAuth token"
+    description: >-
+      Replaced by Model provider + Model credential. Leave empty; filled in
+      together with Model credential the add-on refuses to start.
+  anthropic_api_key:
+    name: "Legacy: Anthropic API key"
+    description: >-
+      Replaced by Model provider + Model credential. Leave empty; filled in
+      together with Model credential the add-on refuses to start.
+  openrouter_api_key:
+    name: "Legacy: OpenRouter API key"
+    description: >-
+      Replaced by Model provider + Model credential. Leave empty; filled in
+      together with Model credential the add-on refuses to start.
+  openrouter_search_model:
+    name: OpenRouter search model
+    description: OpenRouter only. Model used for web search; default perplexity/sonar.
+  openrouter_images:
+    name: OpenRouter images
+    description: OpenRouter only. Send images to the model; on by default.
+  model:
+    name: Model
+    description: >-
+      Claude model id (claude-opus-5), or with OpenRouter a slug like
+      anthropic/claude-opus-5.
+  owner_name:
+    name: Owner name
+    description: Who the assistant serves.
+  owner_language:
+    name: Owner language
+    description: The language the assistant writes to you in, e.g. Italian.
+  skills:
+    name: Skills
+    description: Which methods in .claude/skills/ are live. Any other skill is refused.
+  drive_allowed_folders:
+    name: Drive folders to read
+    description: >-
+      Folder ids the assistant may read, with everything beneath them. Empty
+      means the whole Drive, which is not a safe default.
+  drive_write_folders:
+    name: Drive folders to write
+    description: >-
+      Comma-separated folder ids where Docs may be created and edited. Each
+      must also be in Drive folders to read. Empty means no Drive writes.
+  web_fetch_allowed_domains:
+    name: Web fetch domains
+    description: >-
+      Domains WebFetch may open, subdomains included. Empty, or *, is the
+      open web.
+  scraper_url:
+    name: Scraper URL
+    description: >-
+      The paia-scraper add-on, e.g. http://<prefix>-paia-scraper:8099. Empty
+      means no page tools; price hunting falls back to search.
+  scraper_token:
+    name: Scraper token
+    description: Must match the token in the scraper add-on's options.
+  intervals_api_key:
+    name: Intervals.icu API key
+    description: Intervals.icu > Settings > Developer Settings. Empty means no coach tools.
+  intervals_athlete_id:
+    name: Intervals.icu athlete id
+    description: Same page as the key, e.g. i12345.
+  hrv_cutover_date:
+    name: HRV cutover date
+    description: >-
+      YYYY-MM-DD a new watch took over overnight HRV. HRV and resting HR
+      baselines start there.
+  whisper_model:
+    name: Voice note model
+    description: base suits a Raspberry Pi 4; small is better and noticeably slower.
+  whisper_language:
+    name: Voice note language
+    description: Two-letter code, e.g. it. Empty means detect.
+  distill_hour:
+    name: Distill hour
+    description: Hour of the night the raw log is distilled into the wiki. Remove to turn it off.
+  mail_to:
+    name: Mail to
+    description: The one address routines with channel email write to.
+  smtp_host:
+    name: SMTP host
+    description: Optional. Without SMTP, email routines go out through Google (gws) or fall back to Telegram.
+  smtp_port:
+    name: SMTP port
+  smtp_user:
+    name: SMTP user
+  smtp_password:
+    name: SMTP password
+  smtp_from:
+    name: SMTP from
+  smtp_to:
+    name: "Legacy: SMTP to"
+    description: Replaced by Mail to, which wins when both are set.
+  smtp_tls:
+    name: SMTP TLS
