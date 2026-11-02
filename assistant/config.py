@@ -243,8 +243,9 @@ class Config:
     # baseline uses everything, and the coach says so in every readiness call.
     hrv_cutover_date: date | None = None
     # Where routines with `channel: email` go, sent through the `gws` CLI from
-    # the Google account it is logged in as. One fixed address from the
-    # environment, never one the model picks. Falls back to SMTP_TO.
+    # the Google account it is logged in as, unless SMTP is configured (then
+    # SMTP sends to it). One fixed address from the environment, never one the
+    # model picks. Falls back to SMTP_TO.
     mail_to: str = ""
     # Where /accept writes an accepted brief (assistant/proposals.py): the
     # add-on config share, which the supervisor syncs into the read-only
@@ -325,7 +326,7 @@ def load() -> Config:
             user=os.environ.get("SMTP_USER", "").strip(),
             password=os.environ.get("SMTP_PASSWORD", ""),
             sender=os.environ.get("SMTP_FROM", "").strip(),
-            recipient=os.environ.get("SMTP_TO", "").strip(),
+            recipient=(os.environ.get("MAIL_TO") or os.environ.get("SMTP_TO") or "").strip(),
             use_tls=os.environ.get("SMTP_TLS", "1").strip() != "0",
         ),
         whisper_model=os.environ.get("WHISPER_MODEL", "small"),

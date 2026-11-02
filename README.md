@@ -270,9 +270,10 @@ The list lives in `COMMANDS` in `assistant/main.py` and feeds both `/help` and
 the chat menu: on startup the bot calls `setMyCommands`, so the menu Telegram
 shows is always what the dispatcher can handle.
 
-`channel` is `telegram` or `email`. Email needs the `SMTP_*` variables; without
-them a routine that asks for email falls back to Telegram rather than losing
-the result.
+`channel` is `telegram` or `email`. Email goes to `MAIL_TO`: through the
+`SMTP_*` server when `SMTP_HOST` and `SMTP_FROM` are set, otherwise through
+Gmail (`gws`, after `/google`). With neither, or when the send fails, a routine
+that asks for email falls back to Telegram rather than losing the result.
 
 **The assistant cannot activate a routine.** It writes them `enabled: false`
 and the policy rejects any write containing `enabled: true`. Activation is

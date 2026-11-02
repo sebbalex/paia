@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.16
+
+- Mail: with SMTP host and SMTP from set, routines with channel email now go out through SMTP to Mail to, as the form says. Before, SMTP was used only if the legacy SMTP to was also set; otherwise the add-on tried Gmail through gws, and without a Google sign-in every mail fell back to Telegram.
+
 ## 0.3.15
 
 - Sign in to Google from the chat: put your Desktop OAuth client id and secret in the new Google options, send /google, paste back the address the page lands on. No terminal, no docker exec. Publish the Cloud app (In production) or Google ends the sign-in after seven days. Installs logged in the old way keep working.

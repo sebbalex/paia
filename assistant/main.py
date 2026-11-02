@@ -34,6 +34,17 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 log = logging.getLogger("assistant")
 
 
+def _mailer(cfg) -> GwsMailer | None:
+    """Gmail through gws for `channel: email`, or None to leave it to SMTP.
+
+    An SMTP server the owner configured is a deliberate choice and wins;
+    Gmail is the default when there is none.
+    """
+    if not cfg.mail_to or cfg.smtp.configured:
+        return None
+    return GwsMailer(cfg.gws_bin, cfg.mail_to, state_dir=cfg.state_dir)
+
+
 async def run() -> None:
     cfg = config_module.load()
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
@@ -61,8 +72,7 @@ async def run() -> None:
             loop.add_signal_handler(sig, stop.set)
 
     chat_id = min(owners) if owners else None
-    mailer = (GwsMailer(cfg.gws_bin, cfg.mail_to, state_dir=cfg.state_dir)
-              if cfg.mail_to else None)
+    mailer = _mailer(cfg)
     delivery = Delivery(telegram, chat_id, cfg.smtp, mailer)
     google = google_login.GoogleLogin(cfg.state_dir, google_login.find_client(
         cfg.google_client_id, cfg.google_client_secret))
