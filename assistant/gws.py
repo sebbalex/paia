@@ -118,6 +118,8 @@ from typing import Annotated, Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
+from .google_login import gws_env
+
 log = logging.getLogger(__name__)
 
 # Every command path this module may ever invoke, as the argv segments that
@@ -624,14 +626,40 @@ def _clamp(value: Any, default: int, ceiling: int) -> int:
     return max(1, min(number, ceiling))
 
 
+def _failure(done: subprocess.CompletedProcess) -> "GwsError":
+    """The error a failed gws call raises: its last line, or -- for a
+    sign-in Google no longer honours -- what the owner has to do about it."""
+    detail = (done.stderr or done.stdout or "").strip().splitlines()
+    if any("No credentials provided" in line for line in detail):
+        # gws's own text says `gws auth login`, which the owner cannot type
+        # on the add-on and the model must not suggest.
+        return GwsError(
+            "Google is not signed in on this install. Tell the owner to send "
+            "/google to the bot to connect Calendar, Gmail and Drive."
+        )
+    if any("invalid_grant" in line for line in detail):
+        return GwsError(
+            "Google sign-in expired or was revoked (invalid_grant). Tell the "
+            "owner to send /google connect to sign in again. If it expired "
+            "after about seven days, their Google Cloud app is still in "
+            "Testing and has to be published (add-on docs, Google Workspace)."
+        )
+    return GwsError(detail[-1] if detail else f"exit {done.returncode}")
+
+
 class Gws:
     """Runs the CLI. One instance, held by the Brain, so the binary path and
     the timeout are configured in one place rather than read from the
     environment at every call."""
 
-    def __init__(self, binary: str = "gws", timeout: int = _TIMEOUT) -> None:
+    def __init__(self, binary: str = "gws", timeout: int = _TIMEOUT,
+                 state_dir: Path | None = None) -> None:
         self._binary = binary
         self._timeout = timeout
+        # Where a /google sign-in leaves its credentials (google_login.py).
+        # Looked up at every call, so signing in from the chat takes effect
+        # on the next tool call without a restart.
+        self._state_dir = state_dir
 
     def _call(
         self,
@@ -665,6 +693,7 @@ class Gws:
                 text=True,
                 timeout=self._timeout,
                 check=False,
+                env=gws_env(self._state_dir),
             )
         except FileNotFoundError as exc:
             raise GwsError(
@@ -675,8 +704,7 @@ class Gws:
             raise GwsError(f"gws timed out after {self._timeout}s") from exc
 
         if done.returncode != 0:
-            detail = (done.stderr or done.stdout or "").strip().splitlines()
-            raise GwsError(detail[-1] if detail else f"exit {done.returncode}")
+            raise _failure(done)
         try:
             return json.loads(done.stdout)
         except json.JSONDecodeError as exc:
@@ -723,6 +751,7 @@ class Gws:
                     text=True,
                     timeout=self._timeout,
                     check=False,
+                    env=gws_env(self._state_dir),
                     # The whole reason the temporary directory exists: gws
                     # measures --output against the current directory.
                     cwd=workdir,
@@ -736,8 +765,7 @@ class Gws:
                 raise GwsError(f"gws timed out after {self._timeout}s") from exc
 
             if done.returncode != 0:
-                detail = (done.stderr or done.stdout or "").strip().splitlines()
-                raise GwsError(detail[-1] if detail else f"exit {done.returncode}")
+                raise _failure(done)
 
             target = Path(workdir) / "download"
             if not target.is_file():
@@ -797,6 +825,7 @@ class Gws:
                     text=True,
                     timeout=self._timeout,
                     check=False,
+                    env=gws_env(self._state_dir),
                     cwd=workdir,
                 )
             except FileNotFoundError as exc:
@@ -808,8 +837,7 @@ class Gws:
                 raise GwsError(f"gws timed out after {self._timeout}s") from exc
 
             if done.returncode != 0:
-                detail = (done.stderr or done.stdout or "").strip().splitlines()
-                raise GwsError(detail[-1] if detail else f"exit {done.returncode}")
+                raise _failure(done)
             try:
                 return json.loads(done.stdout)
             except json.JSONDecodeError as exc:

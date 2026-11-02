@@ -1,5 +1,5 @@
 name: PAIA
-version: "0.3.14"
+version: "0.3.15"
 slug: paia
 description: >-
   A personal assistant that lives on this machine, talks over Telegram, and
@@ -126,6 +126,12 @@ schema:
   # scraper add-on's own options.
   scraper_url: str?
   scraper_token: password?
+  # Google Calendar, Gmail and Drive: the Desktop OAuth client from the
+  # owner's own Google Cloud project (DOCS.md, "Google Workspace"). With it,
+  # /google in the chat signs in; the token lands in /data, never here.
+  # Empty and an older `gws auth login` keeps working as it did.
+  google_client_id: str?
+  google_client_secret: password?
   # Intervals.icu for the cycling coach: Settings > Developer Settings gives
   # both. Either empty and the six coach tools are not offered. The cutover
   # is the day a new watch took over overnight HRV (YYYY-MM-DD); HRV and

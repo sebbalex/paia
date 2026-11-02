@@ -284,6 +284,27 @@ What it does not cover: an install that sits unpaired with its log readable
 by someone who should not own it. Pair right after the first start, or set
 the ids in the options.
 
+**Google sign-in** (`assistant/google_login.py`). `/google` runs the OAuth
+authorization-code flow from the transport, with the owner's phone as the
+browser and a loopback redirect nothing listens on; the owner pastes the
+failed page's address back. Credentials never travel through Telegram:
+
+- the pasted code is single-use, expires in minutes, and is redeemable only
+  with the PKCE verifier (kept in process memory for that one sign-in) and the
+  client secret (from the options), neither of which leaves the process;
+- `state` is compared with `hmac.compare_digest`; one sign-in at a time, ten
+  minutes, cleared on first use whatever the outcome;
+- the address is caught before `memory/raw` and the model, and the bot
+  deletes the message from the chat;
+- the refresh token goes from Google's token endpoint into
+  `state/google/credentials.json`, mode 0600 in a 0700 directory, and is
+  handed to `gws` by path (`GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`) only in
+  the environment of its own subprocesses;
+- scopes are the narrowest the tools need (`calendar.readonly`,
+  `calendar.events`, `gmail.readonly`, `gmail.send`, `drive.readonly`,
+  `drive.file`, `documents`), and `_ALLOWED_CALLS` still bounds what is
+  called with them; `/google off` revokes at Google.
+
 **systemd sandbox** (`deploy/paia.service`). The same shape enforced
 by the kernel rather than by our own code: `ReadOnlyPaths` covers the whole
 install, `ReadWritePaths` grants only `memory/` and `state/`. If the policy

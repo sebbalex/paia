@@ -173,6 +173,13 @@ class Config:
     # The CLI does a network round trip to Google. Long enough for a slow
     # link, short enough that a hung call cannot eat the turn timeout.
     gws_timeout_seconds: int = 30
+    # The owner's own Google Cloud OAuth client (Desktop app), for signing
+    # in from the chat with /google (assistant/google_login.py). Empty falls
+    # back to the client_secret.json `gws auth setup` left, if any. Not
+    # GOOGLE_WORKSPACE_CLI_CLIENT_ID: gws reads that one itself, and pairing
+    # it with a login made under another client breaks the old login.
+    google_client_id: str = ""
+    google_client_secret: str = ""
 
     # -- the scraper worker ------------------------------------------------
     # Where scraper/ is listening, e.g. http://127.0.0.1:8099. Empty -- the
@@ -350,6 +357,8 @@ def load() -> Config:
             os.environ.get("OPENROUTER_MAX_TOKENS", "") or Config.openrouter_max_tokens
         ),
         gws_bin=os.environ.get("GWS_BIN", "gws").strip(),
+        google_client_id=os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        google_client_secret=os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
         drive_write_folders=tuple(
             f.strip() for f in write_folders.split(",") if f.strip()
         ),

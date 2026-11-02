@@ -16,6 +16,7 @@ import tempfile
 from . import coach_charts
 from . import coach_report
 from . import config as config_module
+from . import google_login
 from . import memory
 from . import onboarding
 from . import proposals as proposals_module
@@ -60,8 +61,11 @@ async def run() -> None:
             loop.add_signal_handler(sig, stop.set)
 
     chat_id = min(owners) if owners else None
-    mailer = GwsMailer(cfg.gws_bin, cfg.mail_to) if cfg.mail_to else None
+    mailer = (GwsMailer(cfg.gws_bin, cfg.mail_to, state_dir=cfg.state_dir)
+              if cfg.mail_to else None)
     delivery = Delivery(telegram, chat_id, cfg.smtp, mailer)
+    google = google_login.GoogleLogin(cfg.state_dir, google_login.find_client(
+        cfg.google_client_id, cfg.google_client_secret))
 
     # Telegram keeps the chat menu, not us: it has to be rewritten on every
     # start, or the old one survives with commands the bot no longer handles.
@@ -70,7 +74,7 @@ async def run() -> None:
     reaper = asyncio.create_task(brain.reap_idle())
     scheduler = asyncio.create_task(_scheduler(cfg, brain, delivery))
     pump = asyncio.create_task(
-        _pump(cfg, telegram, brain, transcriber, delivery)
+        _pump(cfg, telegram, brain, transcriber, delivery, google)
     )
 
     if pairing.open:
@@ -90,7 +94,8 @@ async def run() -> None:
 
 
 async def _pump(cfg, telegram: Telegram, brain: Brain,
-                transcriber: Transcriber, delivery: Delivery) -> None:
+                transcriber: Transcriber, delivery: Delivery,
+                google: "google_login.GoogleLogin | None" = None) -> None:
     async for incoming in telegram.poll():
         if incoming.paired:
             delivery.set_chat(incoming.chat_id)
@@ -99,8 +104,13 @@ async def _pump(cfg, telegram: Telegram, brain: Brain,
             # have to know what to say to a bot they just met.
             await _onboard(cfg, telegram, brain, incoming.chat_id)
             continue
+        if google is not None and google_login.looks_like_redirect(incoming.text):
+            # A sign-in code on its way back: handled here, before memory/raw
+            # and the model, and taken out of the chat.
+            await _google_finish(telegram, google, incoming)
+            continue
         if incoming.text.startswith("/"):
-            if await _command(cfg, telegram, brain, delivery, incoming):
+            if await _command(cfg, telegram, brain, delivery, incoming, google):
                 continue
         prompt = incoming.text
         if incoming.voice is not None:
@@ -165,6 +175,7 @@ COMMANDS: list[tuple[str, str]] = [
     ("review", "see a brief change — /review <name>"),
     ("accept", "apply a reviewed brief change — /accept <name>"),
     ("reject", "discard a brief change — /reject <name>"),
+    ("google", "connect Calendar, Gmail and Drive — /google [connect|off]"),
     ("help", "what I can do"),
 ]
 
@@ -184,7 +195,8 @@ PAIRED = "Paired: this chat is the owner's now, and pairing is closed.\n\n" + HE
 
 
 async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
-                   incoming: Incoming) -> bool:
+                   incoming: Incoming,
+                   google: "google_login.GoogleLogin | None" = None) -> bool:
     """Commands handled in Python, never by the model.
 
     Enabling a routine is a human act on purpose: the model can write a routine
@@ -272,11 +284,40 @@ async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
         )
         return True
 
+    if command == "google":
+        if google is None:
+            await telegram.send(incoming.chat_id, "Google sign-in is not available here.")
+            return True
+        action = argument.lower()
+        if action in ("connect", "login", "again"):
+            reply = google.start()
+        elif action in ("off", "disconnect", "logout"):
+            reply = await google.disconnect()
+        elif action:
+            reply = "`/google` for the state, `/google connect` to sign in, `/google off` to disconnect."
+        elif google.connected or not google.configured:
+            reply = google.status()
+        else:
+            # Configured and not connected: the one thing to do is sign in.
+            reply = google.start()
+        await telegram.send(incoming.chat_id, reply)
+        return True
+
     if command in ("proposals", "review", "accept", "reject"):
         await telegram.send(incoming.chat_id, _proposal_command(cfg, command, argument))
         return True
 
     return False  # not one of ours: let the model handle it
+
+
+async def _google_finish(telegram: Telegram, google: "google_login.GoogleLogin",
+                         incoming: Incoming) -> None:
+    """End a /google sign-in with the address the owner pasted."""
+    deleted = await telegram.delete(incoming.chat_id, incoming.message_id)
+    reply = await google.finish(incoming.text)
+    if not deleted:
+        reply += "\n\n(I could not delete your message: delete it yourself.)"
+    await telegram.send(incoming.chat_id, reply)
 
 
 def _proposal_command(cfg, command: str, argument: str) -> str:

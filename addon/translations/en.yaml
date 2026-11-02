@@ -77,6 +77,15 @@ configuration:
   scraper_token:
     name: Scraper token
     description: Must match the token in the scraper add-on's options.
+  google_client_id:
+    name: Google client ID
+    description: >-
+      Client ID of the Desktop OAuth client in your Google Cloud project
+      (ends in .apps.googleusercontent.com). Then send /google to the bot.
+      See the Documentation tab, Google Workspace.
+  google_client_secret:
+    name: Google client secret
+    description: The same client's secret. Both or neither.
   intervals_api_key:
     name: Intervals.icu API key
     description: Intervals.icu > Settings > Developer Settings. Empty means no coach tools.

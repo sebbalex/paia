@@ -38,6 +38,9 @@ them, naming it in `folder_id` when several are open, `drive_append_doc` adds
 to the end of one already in one of them, `drive_replace_text` swaps one exact
 string inside one, `drive_rewrite_doc` replaces the whole body of one, and
 none of them can delete, rename, move or share a file).
+Google sign-in is chat-first too: `/google` runs the OAuth flow from the
+transport (`assistant/google_login.py`) with the owner's phone as the browser,
+and every `gws` call reads the token it leaves in `state/google/`.
 Drive reads are confined to the
 folder ids in `DRIVE_ALLOWED_FOLDERS` and everything beneath them. Intervals.icu reads through
 `assistant/intervals.py` (eight `coach_*` reads, metrics in

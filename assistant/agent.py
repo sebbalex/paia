@@ -130,7 +130,7 @@ def build_toolbox(config: Config) -> Toolbox:
     # writing at Drive is simply not available.
     if config.gws_bin:
         servers["gws"] = build_gws_tools(
-            Gws(config.gws_bin, config.gws_timeout_seconds),
+            Gws(config.gws_bin, config.gws_timeout_seconds, config.state_dir),
             config.drive_folder_ids,
             config.drive_write_folders,
         )

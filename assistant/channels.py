@@ -23,6 +23,7 @@ from email.utils import make_msgid
 from pathlib import Path
 
 from .format import to_telegram_html
+from .google_login import gws_env
 
 log = logging.getLogger(__name__)
 
@@ -52,10 +53,12 @@ class GwsMailer:
     takes media only from a path under its working directory.
     """
 
-    def __init__(self, binary: str, recipient: str, timeout: int = 60) -> None:
+    def __init__(self, binary: str, recipient: str, timeout: int = 60,
+                 state_dir: Path | None = None) -> None:
         self._binary = binary
         self.recipient = recipient
         self._timeout = timeout
+        self._state_dir = state_dir  # where a /google sign-in lives
 
     def send(self, message: EmailMessage) -> str:
         with tempfile.TemporaryDirectory(prefix="gws-mail-") as workdir:
@@ -65,7 +68,7 @@ class GwsMailer:
                  "--params", '{"userId":"me"}', "--upload", "upload",
                  "--upload-content-type", "message/rfc822", "--format", "json"],
                 capture_output=True, text=True, timeout=self._timeout,
-                check=False, cwd=workdir,
+                check=False, cwd=workdir, env=gws_env(self._state_dir),
             )
         if done.returncode != 0:
             detail = (done.stderr or done.stdout or "").strip().splitlines()

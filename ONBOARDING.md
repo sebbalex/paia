@@ -34,16 +34,20 @@ switches a feature on and can be added later by re-running the wizard.
 
 **Google: calendar, mail, Drive**
 
-- The `gws` CLI installed and logged in **as the user the assistant runs as**:
-  `gws auth setup`, then `gws auth login`. With it logged in, the wizard lists
-  your calendars and asks which to surface.
+- A Google Cloud OAuth client of your own (Desktop app), made once in the
+  browser: the steps are in `addon/DOCS.md`, "Google Workspace". Its id and
+  secret go in `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` (the
+  add-on's Google options), then `/google` in the chat signs you in, no
+  terminal. The old way still works: the `gws` CLI logged in **as the user
+  the assistant runs as** (`gws auth setup`, then `gws auth login`). Signed
+  in, the wizard lists your calendars and asks which to surface.
 - The Drive folders it may read. Open each folder in Drive; the id is the end
   of the URL (`…/folders/1AbCdEf_GhIjK`). The wizard takes the URL as is. Name
   the top of each tree — everything beneath is included. **No folders means
   the whole Drive**, which works but is not what you want.
 - The folder for trip documents, if you use `adventure-log` / `trip-design`.
 - Writing Docs there needs the Docs API (`docs.googleapis.com`) enabled in the
-  same Cloud project `gws` uses.
+  same Cloud project as the OAuth client.
 - The one address routines may mail to.
 
 **Cycling coach** (`coach` skill)

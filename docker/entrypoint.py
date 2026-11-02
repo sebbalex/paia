@@ -103,6 +103,8 @@ OPTION_ENV = {
     "web_fetch_allowed_domains": "WEB_FETCH_ALLOWED_DOMAINS",
     "scraper_url": "SCRAPER_URL",
     "scraper_token": "SCRAPER_TOKEN",
+    "google_client_id": "GOOGLE_OAUTH_CLIENT_ID",
+    "google_client_secret": "GOOGLE_OAUTH_CLIENT_SECRET",
     "intervals_api_key": "INTERVALS_API_KEY",
     "intervals_athlete_id": "INTERVALS_ATHLETE_ID",
     "hrv_cutover_date": "HRV_CUTOVER_DATE",
@@ -225,6 +227,17 @@ def build_env() -> dict[str, str]:
                 "Telegram user id. Leave the list empty to pair from the chat "
                 "with the code the Log tab shows."
             )
+    # The Google client for /google (assistant/google_login.py): both or
+    # neither, and the id in the shape Google prints, because a pasted
+    # project number or a secret in the id field otherwise surfaces only as a
+    # Google error page on the owner's phone.
+    google_id = env.get("GOOGLE_OAUTH_CLIENT_ID", "")
+    if bool(google_id) != bool(env.get("GOOGLE_OAUTH_CLIENT_SECRET")):
+        raise SystemExit("google_client_id and google_client_secret go together: "
+                         "fill in both, or neither.")
+    if google_id and not google_id.endswith(".apps.googleusercontent.com"):
+        raise SystemExit("google_client_id should end in .apps.googleusercontent.com: "
+                         "copy the Client ID of the Desktop client, not the project id.")
     # assistant/config.py makes the same check, but inside the supervised
     # child, where it would restart every five seconds instead of saying why.
     if env.get("OPENROUTER_API_KEY") and "/" not in env.get("ASSISTANT_MODEL", ""):

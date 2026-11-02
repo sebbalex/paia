@@ -194,9 +194,32 @@ def test_brief_sync() -> None:
             os.environ.pop(name, None)
 
 
+def test_google() -> None:
+    print("build_env: google client")
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        base = {"llm_provider": "claude_subscription", "llm_credential": "sk-ant-oat01-x"}
+        env = _env(tmp, **base)
+        check("neither: fine, nothing set", isinstance(env, dict)
+              and "GOOGLE_OAUTH_CLIENT_ID" not in env, str(env))
+        env = _env(tmp, **base, google_client_id="12-ab.apps.googleusercontent.com",
+                   google_client_secret="GOCSPX-x")
+        check("both -> GOOGLE_OAUTH_CLIENT_ID/SECRET", isinstance(env, dict)
+              and env.get("GOOGLE_OAUTH_CLIENT_ID") == "12-ab.apps.googleusercontent.com"
+              and env.get("GOOGLE_OAUTH_CLIENT_SECRET") == "GOCSPX-x", str(env))
+        check("not gws's own variable", isinstance(env, dict)
+              and "GOOGLE_WORKSPACE_CLI_CLIENT_ID" not in env)
+        out = _env(tmp, **base, google_client_id="12-ab.apps.googleusercontent.com")
+        check("id without secret refused", isinstance(out, str) and "go together" in out, str(out))
+        out = _env(tmp, **base, google_client_id="my-project-123", google_client_secret="x")
+        check("a project id in the id field refused",
+              isinstance(out, str) and ".apps.googleusercontent.com" in out, str(out))
+
+
 def main() -> int:
     test_import()
     test_llm()
+    test_google()
     test_brief_sync()
     if FAILURES:
         print("\n".join(["", "FAILURES:", *FAILURES]))

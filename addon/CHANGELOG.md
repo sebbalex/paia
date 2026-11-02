@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.15
+
+- Sign in to Google from the chat: put your Desktop OAuth client id and secret in the new Google options, send /google, paste back the address the page lands on. No terminal, no docker exec. Publish the Cloud app (In production) or Google ends the sign-in after seven days. Installs logged in the old way keep working.
+
 ## 0.3.14
 
 - The options form names and explains every field. The three old credential fields show as "Legacy" and say to leave them empty in favour of Model provider + Model credential.

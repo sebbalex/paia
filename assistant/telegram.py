@@ -56,6 +56,9 @@ class Incoming:
     # Set on the one message that paired its sender: the transport yields it
     # so the caller can greet the new owner, not so the model reads the code.
     paired: bool = False
+    # So the transport can delete a message it must not leave in the chat:
+    # a pasted Google sign-in address (google_login.py).
+    message_id: int = 0
 
 
 class Telegram:
@@ -128,7 +131,8 @@ class Telegram:
 
                 text = message.get("text")
                 if text:
-                    yield Incoming(chat_id=chat, user_id=sender, text=text)
+                    yield Incoming(chat_id=chat, user_id=sender, text=text,
+                                   message_id=int(message.get("message_id") or 0))
                     continue
 
                 document = _document_of(message)
@@ -205,6 +209,18 @@ class Telegram:
             except Exception:
                 log.exception("send failed in plain text too")
                 return
+
+    async def delete(self, chat_id: int, message_id: int) -> bool:
+        """Remove one message from the chat. False if Telegram says no --
+        a bot may delete in a private chat only for 48 hours."""
+        if not message_id:
+            return False
+        try:
+            await self._call("deleteMessage", chat_id=chat_id, message_id=message_id)
+            return True
+        except Exception as exc:
+            log.warning("deleteMessage failed (%s)", _redact(exc))
+            return False
 
     async def send_photos(self, chat_id: int, photos: list[tuple[str, bytes, str]]) -> None:
         """Send (filename, png, caption) as albums of at most ten."""

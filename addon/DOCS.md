@@ -147,18 +147,55 @@ so it is not readable by any tool the model has.
 
 ## Google Workspace
 
-Calendar, Gmail and Drive go through the `gws` CLI, which needs a one-time
-interactive login. It cannot be done from the add-on options, because it is an
-OAuth flow in a browser. From the Terminal & SSH add-on:
+Calendar, Gmail and Drive are optional. Until you connect them the rest
+works, and the Google tools answer that they are not signed in.
 
-```sh
-container=$(docker ps --format '{{.Names}}' | grep paia)
-docker exec -it "$container" su -s /bin/bash assistant -c "gws auth setup"
-docker exec -it "$container" su -s /bin/bash assistant -c "gws auth login"
-```
+Connecting takes two parts, both in a browser, no terminal.
 
-The credentials land under `/data/home` and survive restarts and upgrades.
-Until you do this the Workspace tools are simply absent — the rest works.
+**1. Your own Google Cloud client, once (about ten minutes).** Google gives
+access to Gmail only through an app registered in a Cloud project, and there
+is no shared one to borrow, so you make your own. It is free.
+
+1. Open https://console.cloud.google.com, signed in as the account the
+   assistant should read, and create a project (any name, e.g. `paia`).
+2. *APIs & Services → Library*: enable **Google Calendar API**, **Gmail API**,
+   **Google Drive API** and **Google Docs API**.
+3. *Google Auth Platform* (called *OAuth consent screen* in older consoles) →
+   *Get started*: any app name, your address as support and contact email,
+   audience **External**.
+4. *Audience*: press **Publish app** so the status reads *In production*.
+   Skip this and Google ends the sign-in after **seven days**, every week.
+   Google will not review it: an app under 100 users needs no verification,
+   and you will see an "unverified app" warning once, at sign-in.
+5. *Clients → Create client*: type **Desktop app**, any name. Copy the
+   **Client ID** and **Client secret**.
+6. Paste them into this add-on's options, *Google client ID* and *Google
+   client secret*, save, and restart the add-on.
+
+**2. Sign in from the chat.** Send `/google` to the bot. It answers with a
+link:
+
+1. Open it on your phone, pick the account, and allow every box. At the
+   "Google hasn't verified this app" screen tap *Advanced → Go to …*: it is
+   your own project.
+2. The page you land on does not load. That is expected: copy the **whole
+   address** from the address bar and send it to the bot.
+3. The bot deletes your message, finishes the sign-in, and says which account
+   is connected.
+
+The pasted address carries a one-time code that expires in minutes and is
+useless without a secret the bot holds in memory for that one sign-in, which
+is why it may pass through Telegram. The lasting token goes from Google
+straight into `/data` (`state/google/`), which no tool the model has can
+read, and never through the chat.
+
+`/google` shows which account is connected, `/google connect` signs in
+again (another account, or boxes you left unticked), `/google off` revokes
+the access at Google and forgets it here. If a Google tool ever reports
+`invalid_grant`, the sign-in was revoked or expired: `/google connect`.
+
+An install already signed in the old way (`gws auth login` through
+`docker exec`) keeps working untouched; `/google` takes over once you use it.
 
 ## Upgrading
 
@@ -188,6 +225,7 @@ In the Telegram chat:
 /review <brief>    the diff of one
 /accept <brief>    apply it, as reviewed
 /reject <brief>    discard it
+/google [connect|off]  Google sign-in: state, sign in, disconnect
 /help              this list, and how many TO FILL lines are open
 ```
 

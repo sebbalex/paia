@@ -270,21 +270,58 @@ As built:
 
 ---
 
-## Phase 6 — Google login (research gate, optional)
+## Phase 6 — Google login (done 2026-11-02)
 
-Facts: there is no device flow (Phase 0). The options that exist are:
-- `gws auth export` on a machine with a browser, plus `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`;
-- a service account.
+**Research gate, answered**
+- `gws auth export --unmasked` prints the standard `authorized_user` JSON
+  (`type`, `client_id`, `client_secret`, `refresh_token`). Verified on 0.22.5.
+- `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` wins over gws's own encrypted store
+  (a bogus client in the file gives `invalid_client`, not the keyring login).
+  A variable naming a **missing** file is a hard error, no fallback: set it
+  only when the file exists.
+- With no credentials gws says `No credentials provided. Run gws auth login`.
+- The owner's laptop login had died with `invalid_grant: Token has been
+  expired or revoked`: the Cloud app was in *Testing*, where Google ends
+  refresh tokens after 7 days. That, not the CLI, is why login kept coming
+  back. Fix is in the docs: publish the app (*In production*, unverified is
+  fine under 100 users).
+- Device flow is out: Google's limited-input flow grants no Calendar or Gmail
+  scope. A shared OAuth client is out: Gmail scopes for strangers need
+  Google's security review. So the Cloud client stays the owner's own,
+  made once in the browser.
 
-Candidate design:
-- The owner runs `gws auth login && gws auth export > gws.json` on a laptop and drops `gws.json` into `/config/import/gws/`.
-- `entrypoint.import_state()` moves it to `/data/home/.config/gws/` with mode 0600 and sets the env var.
+**Built** — instead of the export-and-drop-a-file candidate, which still
+needed a terminal:
+- `assistant/google_login.py`: `/google` sends Google's consent link (PKCE
+  S256, `state`, `access_type=offline`, `prompt=consent`, loopback redirect
+  `http://127.0.0.1:53682/` where nothing listens). The owner pastes the
+  dead page's address back. The code is single-use, minutes-long, and needs
+  the verifier (process memory only) and the client secret: the refresh
+  token never crosses Telegram. Written to `state/google/credentials.json`
+  0600 in the `authorized_user` shape, plus `account.json` (email, date,
+  scopes left unticked). `/google off` revokes and forgets.
+- `main._pump` catches any text with `state=` and `code=`/`error=` before
+  `memory/raw` and the model, deletes the message (`Telegram.delete`,
+  `Incoming.message_id`), and finishes the sign-in.
+- `Gws` and `GwsMailer` pass `gws_env(state_dir)` to every subprocess: the
+  file when it exists, the inherited env otherwise, so old `gws auth login`
+  installs are untouched. No restart after signing in.
+- `gws._failure` turns `No credentials provided` and `invalid_grant` into
+  "tell the owner to send /google".
+- Options `google_client_id` / `google_client_secret` →
+  `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` (not gws's own `GOOGLE_WORKSPACE_CLI_*`,
+  which would pair a new client with an old login). Fallback: the
+  `client_secret.json` `gws auth setup` left. Entrypoint refuses one without
+  the other and an id not ending `.apps.googleusercontent.com`.
+- Scopes: `calendar.readonly`, `calendar.events`, `gmail.readonly`,
+  `gmail.send`, `drive.readonly`, `drive.file`, `documents`, `openid email`.
+- Docs: `addon/DOCS.md` "Google Workspace" is a browser walkthrough, no
+  `docker exec`. `ONBOARDING.md`, `.env.example`, `SECURITY.md`, `CLAUDE.md`.
+- Tests: `tests/test_google_login.py`, plus `test_google` in
+  `tests/test_entrypoint.py`.
 
-Before planning:
-- web-fetch the gws README and confirm the `export` output format and that refresh works from it;
-- confirm the image's gws version matches 0.22.5.
-
-Do not route credentials through Telegram: Telegram stores files on its servers.
+**Still to verify by hand on HA**: real Desktop client, `/google` on a phone,
+paste, a calendar read, a routine mail, `/google off`.
 
 ---
 
