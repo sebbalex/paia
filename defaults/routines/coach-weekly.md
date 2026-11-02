@@ -21,7 +21,7 @@ matters. Open `coach_activity` on each session of the week that was hard or
 long (a set, IF ≥ 0.80, or ≥ 2.5 h), and judge it against "Last prescribed"
 in `memory/wiki/training.md` when it was a prescribed one.
 
-Then file the report with `coach_report`, once, in the owner's language, in the coach's
+Then file the report with `coach_report`, once in this run, in the owner's language, in the coach's
 voice (skill §1). Short and straight to the point: the owner reads it in two
 minutes. The system adds every number as tiles (load, hours, CTL, TSB, HRV,
 eFTP, intensity split, weeks to the goal) and the trend charts, so do not

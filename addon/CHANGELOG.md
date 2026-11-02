@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.18
+
+- Routines run in a fresh session of their own, not inside the chat. Before, a routine saw whatever was still in the chat's context: the weekly coach report run twice within half an hour skipped filing its report as a "duplicate", and the mail went out as plain text without next week's sessions. The chat session is untouched by a routine run, so the chat no longer sees the routine's output either; the wiki and the log still record it.
+
 ## 0.3.17
 
 - `/selftest` checks every connector in one go — model, Google sign-in, Calendar, Gmail, each Drive folder, Intervals.icu, scraper, mail route, voice, claude-mem, routines, skills — and answers one line each with the reason when something fails. Reads only; addresses masked. `/selftest mail` sends one real test mail to Mail to and shows the error instead of falling back to Telegram. Every start logs a one-line `selftest:` summary.

@@ -195,6 +195,8 @@ class Brain:
         self._last_active = 0.0
         self._lock = asyncio.Lock()
         self._session_file: Path = config.state_dir / "session_id"
+        # Swapped in tests; the real one spawns the Claude Code CLI.
+        self._client_factory = lambda options: ClaudeSDKClient(options=options)
 
     # -- session lifecycle -------------------------------------------------
 
@@ -317,6 +319,8 @@ class Brain:
         self, prompt: str, timeout: int | None = None, routine: bool = False
     ) -> Turn:
         limit = timeout or self._config.turn_timeout_seconds
+        if routine:
+            return await self._ask_routine(prompt, limit)
         async with self._lock:
             client = await self._ensure_client()
             self._last_active = time.monotonic()
@@ -340,7 +344,44 @@ class Brain:
             finally:
                 self._last_active = time.monotonic()
 
-    async def _run_turn(self, client: ClaudeSDKClient, prompt: str) -> Turn:
+    async def _ask_routine(self, prompt: str, limit: int) -> Turn:
+        """A routine runs in a session of its own, opened and closed here.
+
+        Never the chat session: a routine is a prompt that runs with nobody
+        watching, and it must read the same every time. In the chat session it
+        saw whatever was still in context -- its own run half an hour earlier,
+        say, and then judged a second weekly report a duplicate and filed
+        none. It also keeps text a mail or a page left in the chat from
+        steering a turn nobody reads. The chat session id is left alone; the
+        lock still runs routines and chat turns one at a time.
+        """
+        async with self._lock:
+            self._policy.begin_turn(routine=True)
+            client = self._client_factory(self._options(None))
+            try:
+                await client.connect()
+                return await asyncio.wait_for(
+                    self._run_turn(client, prompt, keep_session=False),
+                    timeout=limit,
+                )
+            except asyncio.TimeoutError:
+                log.error("routine turn exceeded %ss", limit)
+                return Turn(
+                    "That took too long and I cut it off. Try narrowing it down.",
+                    ok=False,
+                )
+            except Exception:
+                log.exception("routine turn failed")
+                return Turn("Something broke on my side. It's in the logs.", ok=False)
+            finally:
+                # Ends the session so claude-mem's hooks still record the run.
+                try:
+                    await client.disconnect()
+                except Exception:
+                    log.exception("error closing routine session")
+
+    async def _run_turn(self, client: ClaudeSDKClient, prompt: str,
+                        keep_session: bool = True) -> Turn:
         await client.query(prompt)
         parts: list[str] = []
         ok = True
@@ -350,7 +391,7 @@ class Brain:
                     if isinstance(block, TextBlock):
                         parts.append(block.text)
             elif isinstance(message, ResultMessage):
-                if getattr(message, "session_id", None):
+                if keep_session and getattr(message, "session_id", None):
                     self._store_session_id(message.session_id)
                 # An auth failure or API error arrives as ordinary assistant
                 # text -- "API Error: 401 ..." reads exactly like a reply. Only

@@ -740,7 +740,11 @@ class OpenRouterBrain:
             # The turn works on a copy and is kept only if it finishes: a
             # turn cut off between a tool call and its result would leave a
             # history every later request is refused for.
-            messages = _trim(self._messages, HISTORY_CHARS) + [{"role": "user", "content": prompt}]
+            # A routine starts from nothing and leaves nothing behind, as on
+            # the Claude backend (agent.Brain._ask_routine): what is in the
+            # chat must not change what an unattended run decides.
+            history = [] if routine else _trim(self._messages, HISTORY_CHARS)
+            messages = history + [{"role": "user", "content": prompt}]
             try:
                 texts, ok = await asyncio.wait_for(self._loop.run(messages), timeout=limit)
             except asyncio.TimeoutError:
@@ -753,7 +757,7 @@ class OpenRouterBrain:
                 log.exception("turn failed")
                 return Turn("Something broke on my side. It's in the logs.", ok=False)
             text = "\n".join(texts).strip() or "(no reply)"
-            if ok:
+            if ok and not routine:
                 _strip_images(messages)
                 self._messages = messages
                 self._save()
