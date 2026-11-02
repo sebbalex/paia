@@ -109,6 +109,44 @@ class Delivery:
             return self._mailer is not None or self._smtp.configured
         return False
 
+    @property
+    def mail_route(self) -> str | None:
+        """Which way `channel: email` goes: "gws", "smtp", or None."""
+        if self._mailer is not None:
+            return "gws"
+        if self._smtp.configured:
+            return "smtp"
+        return None
+
+    @property
+    def mail_recipient(self) -> str:
+        if self._mailer is not None:
+            return self._mailer.recipient
+        return self._smtp.recipient if self._smtp.configured else ""
+
+    def smtp_login(self) -> None:
+        """Connect, log in, quit: proves the SMTP settings without sending.
+        Blocking; raises what smtplib raises."""
+        cls = smtplib.SMTP if self._smtp.use_tls else smtplib.SMTP_SSL
+        with cls(self._smtp.host, self._smtp.port, timeout=15) as server:
+            if self._smtp.use_tls:
+                server.starttls()
+            if self._smtp.user:
+                server.login(self._smtp.user, self._smtp.password)
+            server.noop()
+
+    async def send_test(self, subject: str, body: str) -> None:
+        """One real mail down the routine path, for `/selftest mail`. Unlike
+        send(), a failure raises instead of falling back to Telegram: the
+        point is to see it."""
+        if self._mailer is not None:
+            message = build_email(subject, body, None, self._mailer.recipient)
+            await asyncio.to_thread(self._mailer.send, message)
+        elif self._smtp.configured:
+            await asyncio.to_thread(self._send_email, subject, body)
+        else:
+            raise RuntimeError("no mail route: set MAIL_TO, plus SMTP host and from for SMTP")
+
     async def send(self, channel: str, subject: str, body: str,
                    charts: list | tuple = ()) -> None:
         """`charts` are coach_charts.Chart: inline in mail, an album on Telegram."""

@@ -21,8 +21,10 @@ from . import memory
 from . import onboarding
 from . import proposals as proposals_module
 from . import routines as routines_module
+from . import selftest
 from .agent import Brain, make_brain
 from .channels import Delivery, GwsMailer
+from .gws import Gws
 from .pairing import Pairing
 from .speech import Transcriber
 from .telegram import Incoming, Telegram
@@ -77,14 +79,28 @@ async def run() -> None:
     google = google_login.GoogleLogin(cfg.state_dir, google_login.find_client(
         cfg.google_client_id, cfg.google_client_secret))
 
+    gws = Gws(cfg.gws_bin, cfg.gws_timeout_seconds, cfg.state_dir) if cfg.gws_bin else None
+
+    async def tester(argument: str = "", probe_model: bool = True) -> str:
+        if argument.lower() == "mail":
+            return await selftest.mail_test(delivery)
+        results = await selftest.run_all(
+            cfg, delivery, google=google, gws=gws, icu=brain.icu,
+            transcriber=transcriber, probe_model=probe_model)
+        if not probe_model:
+            return selftest.summary(results)
+        return selftest.render(results)
+
     # Telegram keeps the chat menu, not us: it has to be rewritten on every
     # start, or the old one survives with commands the bot no longer handles.
     await telegram.set_commands(COMMANDS)
+    # Startup line in the log: an add-on owner reads the log before the chat.
+    startup_check = asyncio.create_task(_startup_selftest(tester))
 
     reaper = asyncio.create_task(brain.reap_idle())
     scheduler = asyncio.create_task(_scheduler(cfg, brain, delivery))
     pump = asyncio.create_task(
-        _pump(cfg, telegram, brain, transcriber, delivery, google)
+        _pump(cfg, telegram, brain, transcriber, delivery, google, tester)
     )
 
     if pairing.open:
@@ -94,7 +110,7 @@ async def run() -> None:
     await stop.wait()
     log.info("shutting down")
 
-    for task in (pump, reaper, scheduler):
+    for task in (pump, reaper, scheduler, startup_check):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -103,9 +119,28 @@ async def run() -> None:
     await telegram.aclose()
 
 
+async def _startup_selftest(tester) -> None:
+    try:
+        log.info(await tester(probe_model=False))
+    except Exception:
+        log.exception("startup selftest failed")
+
+
+async def _selftest(telegram: Telegram, chat_id: int, tester, argument: str) -> None:
+    """In the background, like /run: the checks take up to a minute and the
+    chat must keep answering meanwhile."""
+    try:
+        reply = await tester(argument)
+    except Exception:
+        log.exception("selftest failed")
+        reply = "Self-test crashed; the details are in the log."
+    await telegram.send(chat_id, reply)
+
+
 async def _pump(cfg, telegram: Telegram, brain: Brain,
                 transcriber: Transcriber, delivery: Delivery,
-                google: "google_login.GoogleLogin | None" = None) -> None:
+                google: "google_login.GoogleLogin | None" = None,
+                tester=None) -> None:
     async for incoming in telegram.poll():
         if incoming.paired:
             delivery.set_chat(incoming.chat_id)
@@ -120,7 +155,7 @@ async def _pump(cfg, telegram: Telegram, brain: Brain,
             await _google_finish(telegram, google, incoming)
             continue
         if incoming.text.startswith("/"):
-            if await _command(cfg, telegram, brain, delivery, incoming, google):
+            if await _command(cfg, telegram, brain, delivery, incoming, google, tester):
                 continue
         prompt = incoming.text
         if incoming.voice is not None:
@@ -186,6 +221,7 @@ COMMANDS: list[tuple[str, str]] = [
     ("accept", "apply a reviewed brief change — /accept <name>"),
     ("reject", "discard a brief change — /reject <name>"),
     ("google", "connect Calendar, Gmail and Drive — /google [connect|off]"),
+    ("selftest", "check every connector — /selftest [mail]"),
     ("help", "what I can do"),
 ]
 
@@ -206,7 +242,8 @@ PAIRED = "Paired: this chat is the owner's now, and pairing is closed.\n\n" + HE
 
 async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
                    incoming: Incoming,
-                   google: "google_login.GoogleLogin | None" = None) -> bool:
+                   google: "google_login.GoogleLogin | None" = None,
+                   tester=None) -> bool:
     """Commands handled in Python, never by the model.
 
     Enabling a routine is a human act on purpose: the model can write a routine
@@ -311,6 +348,19 @@ async def _command(cfg, telegram: Telegram, brain: Brain, delivery: Delivery,
             # Configured and not connected: the one thing to do is sign in.
             reply = google.start()
         await telegram.send(incoming.chat_id, reply)
+        return True
+
+    if command == "selftest":
+        if tester is None:
+            await telegram.send(incoming.chat_id, "Self-test is not available here.")
+            return True
+        if argument and argument.lower() != "mail":
+            await telegram.send(incoming.chat_id,
+                                "`/selftest` checks everything, `/selftest mail` sends a test mail.")
+            return True
+        await telegram.send(incoming.chat_id,
+                            "Sending a test mail…" if argument else "Checking every connector…")
+        asyncio.create_task(_selftest(telegram, incoming.chat_id, tester, argument))
         return True
 
     if command in ("proposals", "review", "accept", "reject"):

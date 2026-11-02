@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.17
+
+- `/selftest` checks every connector in one go — model, Google sign-in, Calendar, Gmail, each Drive folder, Intervals.icu, scraper, mail route, voice, claude-mem, routines, skills — and answers one line each with the reason when something fails. Reads only; addresses masked. `/selftest mail` sends one real test mail to Mail to and shows the error instead of falling back to Telegram. Every start logs a one-line `selftest:` summary.
+
 ## 0.3.16
 
 - Mail: with SMTP host and SMTP from set, routines with channel email now go out through SMTP to Mail to, as the form says. Before, SMTP was used only if the legacy SMTP to was also set; otherwise the add-on tried Gmail through gws, and without a Google sign-in every mail fell back to Telegram.

@@ -228,6 +228,18 @@ class GoogleLogin:
         except (OSError, ValueError):
             return {}
 
+    @property
+    def missing(self) -> list[str] | None:
+        """Labels of the scopes the sign-in did not grant; None when nobody
+        signed in from the chat (an old-style login, or none at all)."""
+        if not self.connected:
+            return None
+        return list(self._account().get("missing") or [])
+
+    @property
+    def email(self) -> str:
+        return str(self._account().get("email") or "")
+
     def status(self) -> str:
         if not self.connected:
             if not self.configured:

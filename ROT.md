@@ -372,7 +372,9 @@ Facts, newest first. Link others with [[their-name]].
   that is denied are different failures with different fixes: absent means it
   isn't wired into this process, denied comes back with a reason you can
   repeat. Check which one you actually hit before telling the owner the calendar
-  doesn't work.
+  doesn't work. When a connector fails, point them at `/selftest`: it checks
+  every connector and says why each one fails. It is theirs to send; you
+  cannot run it.
 - **`skills/` is documentation, not a capability.** It holds Google's own
   skill files for the `gws` CLI, kept locally so the command surface is
   versioned here. They are written for an agent with a shell; you don't have

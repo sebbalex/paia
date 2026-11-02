@@ -226,8 +226,14 @@ In the Telegram chat:
 /accept <brief>    apply it, as reviewed
 /reject <brief>    discard it
 /google [connect|off]  Google sign-in: state, sign in, disconnect
+/selftest [mail]   check every connector; `mail` sends one test mail
 /help              this list, and how many TO FILL lines are open
 ```
+
+Something not working? Send `/selftest` first: one line per connector, with
+the reason when one fails. `/selftest mail` sends a real test mail and shows
+the SMTP or Gmail error if it does not arrive. The add-on log also carries a
+`selftest:` line from every start.
 
 The assistant writes routines with `enabled: false` and cannot flip that flag,
 and proposes briefs it cannot apply. Activation and acceptance are yours:

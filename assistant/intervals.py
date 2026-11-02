@@ -142,6 +142,11 @@ class Intervals:
     def enabled(self) -> bool:
         return bool(self._key and self._athlete)
 
+    async def ping(self) -> None:
+        """One live read of the athlete record, for /selftest. Skips the cache:
+        a cached answer would say the key works after it was revoked."""
+        await self._http("GET", f"/athlete/{self._athlete}")
+
     # -- cache and backoff --------------------------------------------------
 
     def _cache_file(self, path: str, params: dict[str, Any]) -> Path:

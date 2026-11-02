@@ -263,8 +263,18 @@ Commands, handled in Python and never by the model:
 /enable <name>     enable
 /disable <name>    suspend
 /run <name>        run now
+/selftest [mail]   check every connector; `mail` sends one test mail
 /help              this list
 ```
+
+`/selftest` runs one read against each connector (model, Google sign-in,
+Calendar, Gmail, each Drive folder, Intervals.icu, scraper, mail route,
+voice, claude-mem, routines, skills) and answers one line each: `ok`, `FAIL`
+with the reason, `warn`, or `off` when it is not configured. Nothing is
+written anywhere; mail addresses are masked so the reply can be forwarded.
+`/selftest mail` sends one real message to `MAIL_TO` and reports the error
+instead of falling back to Telegram. A token-free version runs at startup and
+leaves one `selftest:` line in the log.
 
 The list lives in `COMMANDS` in `assistant/main.py` and feeds both `/help` and
 the chat menu: on startup the bot calls `setMyCommands`, so the menu Telegram
