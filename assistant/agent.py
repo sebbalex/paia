@@ -101,6 +101,26 @@ Everything the machine reads stays English.
 log = logging.getLogger(__name__)
 
 
+def usage_line(result: ResultMessage) -> str:
+    """What one turn cost, from the CLI's own count.
+
+    Input is split three ways because they are billed three ways: fresh
+    input at full price, cache reads at a tenth, cache writes at a quarter
+    more. A turn that is mostly cache read is the prefix doing its job; one
+    that is mostly cache write is a session that went cold first.
+    """
+    usage = getattr(result, "usage", None) or {}
+    line = (f"{getattr(result, 'num_turns', '?')} calls, "
+            f"{usage.get('input_tokens', 0)} in, "
+            f"{usage.get('cache_read_input_tokens', 0)} cache read, "
+            f"{usage.get('cache_creation_input_tokens', 0)} cache write, "
+            f"{usage.get('output_tokens', 0)} out")
+    cost = getattr(result, "total_cost_usd", None)
+    if cost is not None:
+        line += f", ${cost:.4f}"
+    return line
+
+
 @dataclass
 class Toolbox:
     """The in-process tools, built once and shared by whichever brain runs.
@@ -391,6 +411,7 @@ class Brain:
                     if isinstance(block, TextBlock):
                         parts.append(block.text)
             elif isinstance(message, ResultMessage):
+                log.info("turn: %s", usage_line(message))
                 if keep_session and getattr(message, "session_id", None):
                     self._store_session_id(message.session_id)
                 # An auth failure or API error arrives as ordinary assistant

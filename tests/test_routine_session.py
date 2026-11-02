@@ -121,17 +121,35 @@ async def test_openrouter(failures: list[str]) -> None:
         config, http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     await brain.ask("ciao")
     await brain.ask("weekly report", routine=True)
-    seen = [m.get("content") for m in requests[-1]["messages"] if m["role"] == "user"]
+    seen = [m.get("content").split("]\n", 1)[-1] for m in requests[-1]["messages"] if m["role"] == "user"]
     if seen != ["weekly report"]:
         failures.append(f"the routine saw the chat history: {seen}")
     await brain.ask("e adesso?")
-    seen = [m.get("content") for m in requests[-1]["messages"] if m["role"] == "user"]
+    seen = [m.get("content").split("]\n", 1)[-1] for m in requests[-1]["messages"] if m["role"] == "user"]
     if seen != ["ciao", "e adesso?"]:
         failures.append(f"the routine was kept in the chat history: {seen}")
 
 
+def test_usage_line(failures: list[str]) -> None:
+    from assistant.agent import usage_line
+    result = ResultMessage(
+        subtype="success", duration_ms=1, duration_api_ms=1, is_error=False,
+        num_turns=3, session_id="s", total_cost_usd=0.01234,
+        usage={"input_tokens": 12, "cache_read_input_tokens": 9000,
+               "cache_creation_input_tokens": 400, "output_tokens": 50},
+    )
+    want = "3 calls, 12 in, 9000 cache read, 400 cache write, 50 out, $0.0123"
+    if usage_line(result) != want:
+        failures.append(f"usage line: {usage_line(result)!r}")
+    bare = ResultMessage(subtype="success", duration_ms=1, duration_api_ms=1,
+                         is_error=False, num_turns=1, session_id="s")
+    if usage_line(bare) != "1 calls, 0 in, 0 cache read, 0 cache write, 0 out":
+        failures.append(f"usage line without usage: {usage_line(bare)!r}")
+
+
 async def run() -> int:
     failures: list[str] = []
+    test_usage_line(failures)
     await test_claude(failures)
     await test_openrouter(failures)
     if failures:

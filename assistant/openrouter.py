@@ -47,9 +47,12 @@ from .policy import Policy
 log = logging.getLogger(__name__)
 
 # The conversation kept between turns, in characters (roughly four to a
-# token). Past it the oldest whole turns go. Generous enough for a morning of
-# chat, small enough that every message does not resend a novel.
-HISTORY_CHARS = 300_000
+# token). Past it the oldest whole turns go, down to HISTORY_TRIM_TO in one
+# cut: trimming shifts the start of the prompt and so throws away whatever
+# the provider had cached, and one deep cut now and then costs far less than
+# a shallow one on every message.
+HISTORY_CHARS = 200_000
+HISTORY_TRIM_TO = 100_000
 # One tool result as kept in the history. The turn that asked for it sees it
 # whole up to this; gws and scrape already cut long files well below it.
 RESULT_CHARS = 60_000
@@ -542,7 +545,8 @@ PREAMBLE = """You are the assistant described below, running as a long-lived pro
 You act through the tools you are given and nothing else: there is no shell.
 
 Working directory: {root}. Every path you pass to a tool is relative to it.
-Now: {now}.
+Each of the owner's messages starts with the local time it was sent, in
+square brackets: that is "now".
 
 The files below mention claude-mem (search, get_observations, timeline). It is
 not running in this deployment: those tools do not exist. Recall comes from
@@ -558,16 +562,80 @@ Skills live right now (load one with the Skill tool before doing its job):
 
 
 def system_prompt(config: Config) -> str:
+    """The same text on every call, so a provider can cache it.
+
+    Nothing that moves belongs here -- the clock above all: a timestamp at
+    the top changed the whole prompt every minute, and with it every cache
+    key. The time rides on each owner message instead (stamped()), where it
+    is written once and never changes again.
+    """
     return "\n\n".join((
         PREAMBLE.format(
             root=config.root,
-            now=datetime.now().astimezone().strftime("%A %Y-%m-%d %H:%M %Z"),
             skills=skill_listing(config) or "(none)",
         ),
         project_instructions(config.root),
         owner_block(config),
         INJECTION_GUARD,
     ))
+
+
+def stamped(prompt: str) -> str:
+    """The owner's message with the time it was sent in front."""
+    now = datetime.now().astimezone().strftime("%A %Y-%m-%d %H:%M %Z")
+    return f"[{now}]\n{prompt}"
+
+
+def caches_explicitly(model: str) -> bool:
+    """Whether the model caches only where the request marks it.
+
+    Anthropic models through OpenRouter cache nothing without cache_control
+    breakpoints. OpenAI, DeepSeek, Gemini 2.5 and the rest cache a repeated
+    prefix on their own, which a stable prefix is enough for.
+    """
+    return model.startswith("anthropic/")
+
+
+def _with_breakpoint(message: dict[str, Any]) -> dict[str, Any]:
+    """A copy of `message` whose last content part carries cache_control."""
+    content = message.get("content")
+    if isinstance(content, str) and content:
+        parts = [{"type": "text", "text": content}]
+    elif isinstance(content, list) and content:
+        parts = [dict(part) for part in content]
+    else:
+        return message
+    parts[-1]["cache_control"] = {"type": "ephemeral"}
+    return {**message, "content": parts}
+
+
+def wire_messages(config: Config, system: str,
+                  messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What goes on the wire for one call; `messages` itself is not touched.
+
+    For a model that caches only on request, two breakpoints: the end of the
+    system prompt, which never changes, and the end of the conversation so
+    far, which the next call in the same turn -- or the next turn -- extends
+    and so finds cached. Anthropic allows four; two cover it.
+    """
+    if not caches_explicitly(config.model):
+        return [{"role": "system", "content": system}, *messages]
+    head = _with_breakpoint({"role": "system", "content": system})
+    if not messages:
+        return [head]
+    return [head, *messages[:-1], _with_breakpoint(messages[-1])]
+
+
+def usage_line(usage: dict[str, Any]) -> str:
+    """One call's tokens: in (of which cached / written to cache), out, cost."""
+    details = usage.get("prompt_tokens_details") or {}
+    line = (f"{usage.get('prompt_tokens')} in "
+            f"({details.get('cached_tokens') or 0} cached, "
+            f"{details.get('cache_write_tokens') or 0} cache write), "
+            f"{usage.get('completion_tokens')} out")
+    if usage.get("cost") is not None:
+        line += f", ${usage['cost']}"
+    return line
 
 
 # -- the loop ----------------------------------------------------------------
@@ -610,18 +678,34 @@ class ToolLoop:
     async def run(self, messages: list[dict[str, Any]]) -> tuple[list[str], bool]:
         """Extend `messages` in place with this turn; return its text and ok."""
         texts: list[str] = []
+        system = system_prompt(self._config)
+        totals = {"calls": 0, "in": 0, "cached": 0, "out": 0, "cost": 0.0}
+        try:
+            return await self._steps(messages, system, texts, totals)
+        finally:
+            if totals["calls"]:
+                log.info("turn: %d calls, %d in (%d cached), %d out, $%.4f",
+                         totals["calls"], totals["in"], totals["cached"],
+                         totals["out"], totals["cost"])
+
+    async def _steps(self, messages: list[dict[str, Any]], system: str,
+                     texts: list[str], totals: dict[str, Any]) -> tuple[list[str], bool]:
         for _ in range(MAX_STEPS):
             body = {
                 "model": self._config.model,
-                "messages": [{"role": "system", "content": system_prompt(self._config)}, *messages],
+                "messages": wire_messages(self._config, system, messages),
                 "max_tokens": self._config.openrouter_max_tokens,
             }
             if self._specs:
                 body["tools"] = self._specs
             reply = await _complete(self._http, self._config, body)
             usage = reply.get("usage") or {}
-            log.info("model %s: %s in, %s out", reply.get("model"),
-                     usage.get("prompt_tokens"), usage.get("completion_tokens"))
+            log.info("model %s: %s", reply.get("model"), usage_line(usage))
+            totals["calls"] += 1
+            totals["in"] += usage.get("prompt_tokens") or 0
+            totals["cached"] += (usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
+            totals["out"] += usage.get("completion_tokens") or 0
+            totals["cost"] += usage.get("cost") or 0.0
             message = reply["choices"][0]["message"]
             content = message.get("content") or ""
             calls = message.get("tool_calls") or []
@@ -697,8 +781,10 @@ def _strip_images(messages: list[dict[str, Any]]) -> None:
             )
 
 
-def _trim(messages: list[dict[str, Any]], budget: int) -> list[dict[str, Any]]:
-    """Drop the oldest whole turns until the history fits the budget.
+def _trim(messages: list[dict[str, Any]], budget: int,
+          floor: int | None = None) -> list[dict[str, Any]]:
+    """Once the history is over `budget`, drop the oldest whole turns until
+    it fits `floor` (the budget itself if not given).
 
     A turn starts at a user message carrying a string -- the owner's prompt,
     not the image follow-up -- so a cut never separates a tool call from its
@@ -706,8 +792,10 @@ def _trim(messages: list[dict[str, Any]], budget: int) -> list[dict[str, Any]]:
     """
     starts = [i for i, m in enumerate(messages)
               if m.get("role") == "user" and isinstance(m.get("content"), str)]
-    while len(starts) > 1 and len(json.dumps(messages[starts[0]:])) > budget:
-        starts.pop(0)
+    if starts and len(json.dumps(messages[starts[0]:])) > budget:
+        target = budget if floor is None else floor
+        while len(starts) > 1 and len(json.dumps(messages[starts[0]:])) > target:
+            starts.pop(0)
     return messages[starts[0]:] if starts else []
 
 
@@ -743,8 +831,8 @@ class OpenRouterBrain:
             # A routine starts from nothing and leaves nothing behind, as on
             # the Claude backend (agent.Brain._ask_routine): what is in the
             # chat must not change what an unattended run decides.
-            history = [] if routine else _trim(self._messages, HISTORY_CHARS)
-            messages = history + [{"role": "user", "content": prompt}]
+            history = [] if routine else _trim(self._messages, HISTORY_CHARS, HISTORY_TRIM_TO)
+            messages = history + [{"role": "user", "content": stamped(prompt)}]
             try:
                 texts, ok = await asyncio.wait_for(self._loop.run(messages), timeout=limit)
             except asyncio.TimeoutError:
@@ -795,7 +883,7 @@ async def run_once(config: Config, prompt: str, tools: tuple[str, ...]) -> Turn:
         loop = ToolLoop(config, policy, LocalTools(config, policy, http).tools(tools), http)
         started = time.monotonic()
         try:
-            texts, ok = await loop.run([{"role": "user", "content": prompt}])
+            texts, ok = await loop.run([{"role": "user", "content": stamped(prompt)}])
         except ModelError as exc:
             return Turn(f"The model call failed ({exc}).", ok=False)
         log.info("one-shot run took %.0fs", time.monotonic() - started)

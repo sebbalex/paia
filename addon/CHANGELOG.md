@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.19
+
+- Cheaper model calls on OpenRouter. The system prompt no longer carries the clock, which changed it every minute and stopped any provider from caching it; the time now goes in front of each of your messages. Anthropic models get cache breakpoints, so each tool step reads the conversation from cache. Long chats are trimmed once, from 200k down to 100k characters, rather than a little on every message.
+- The log records what each turn cost: tokens in, how many came from cache, tokens out, and the price, on both the Claude and OpenRouter backends.
+
 ## 0.3.18
 
 - Routines run in a fresh session of their own, not inside the chat. Before, a routine saw whatever was still in the chat's context: the weekly coach report run twice within half an hour skipped filing its report as a "duplicate", and the mail went out as plain text without next week's sessions. The chat session is untouched by a routine run, so the chat no longer sees the routine's output either; the wiki and the log still record it.

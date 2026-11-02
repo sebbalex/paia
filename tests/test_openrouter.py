@@ -125,7 +125,7 @@ async def test_read_round_trip(failures: list[str]) -> None:
     brain2 = openrouter.OpenRouterBrain(make_config(root), http=script2.client())
     await brain2.ask("e la bici da strada?")
     sent = script2.requests[0]["messages"]
-    if not any(m.get("content") == "che cambio ha la gravel?" for m in sent):
+    if not any(str(m.get("content", "")).endswith("\nche cambio ha la gravel?") for m in sent):
         failures.append("history not resumed after a restart")
 
 
@@ -238,6 +238,53 @@ async def test_mcp_tools(failures: list[str]) -> None:
         failures.append("coach tool ran without Section 11 being read first")
 
 
+async def test_cacheable_prefix(failures: list[str]) -> None:
+    root = make_root()
+    # Two calls in one turn, then a second turn: the system prompt must be
+    # byte-identical across all three, or no provider can cache it.
+    script = Script(call("Read", {"file_path": "memory/wiki/bikes.md"}), answer("a"), answer("b"))
+    brain = openrouter.OpenRouterBrain(make_config(root), http=script.client())
+    await brain.ask("uno")
+    await brain.ask("due")
+    systems = {r["messages"][0]["content"] for r in script.requests}
+    if len(systems) != 1:
+        failures.append("system prompt changed between calls")
+    if "Now:" in next(iter(systems)):
+        failures.append("system prompt still carries the clock")
+    first_user = script.requests[0]["messages"][1]["content"]
+    if not (first_user.startswith("[") and first_user.endswith("]\nuno")):
+        failures.append(f"owner message not stamped with the time: {first_user!r}")
+    # The second turn resends the first exactly as it went the first time.
+    if script.requests[2]["messages"][1:4] != script.requests[1]["messages"][1:4]:
+        failures.append("history resent differently from how it was first sent")
+
+    # An Anthropic model gets two cache breakpoints; the stored history none.
+    root = make_root()
+    script = Script(call("Read", {"file_path": "memory/wiki/bikes.md"}), answer("a"))
+    brain = openrouter.OpenRouterBrain(
+        replace(make_config(root), model="anthropic/claude-sonnet-5-5"), http=script.client())
+    await brain.ask("uno")
+    for n, request in enumerate(script.requests):
+        sent = request["messages"]
+        marks = [i for i, m in enumerate(sent) if isinstance(m["content"], list)
+                 and m["content"][-1].get("cache_control")]
+        if marks != [0, len(sent) - 1]:
+            failures.append(f"call {n}: breakpoints at {marks}, wanted system and last")
+    saved = (root / "state" / "openrouter" / "history.json").read_text()
+    if "cache_control" in saved:
+        failures.append("cache_control leaked into the stored history")
+
+
+def test_usage_line(failures: list[str]) -> None:
+    line = openrouter.usage_line({"prompt_tokens": 100, "completion_tokens": 5,
+                                  "prompt_tokens_details": {"cached_tokens": 80},
+                                  "cost": 0.001})
+    if line != "100 in (80 cached, 0 cache write), 5 out, $0.001":
+        failures.append(f"usage line: {line!r}")
+    if openrouter.usage_line({}) != "None in (0 cached, 0 cache write), None out":
+        failures.append("usage line without usage")
+
+
 def test_trim(failures: list[str]) -> None:
     history = []
     for n in range(50):
@@ -254,6 +301,12 @@ def test_trim(failures: list[str]) -> None:
         failures.append("trim left the history over budget")
     if kept[-1] != history[-1]:
         failures.append("trim dropped the newest turn")
+    # Under budget, nothing moves; over it, one deep cut to the floor.
+    if openrouter._trim(history, 10**9, 1_000) != history:
+        failures.append("trim cut a history under budget")
+    deep = openrouter._trim(history, 100_000, 20_000)
+    if len(json.dumps(deep)) > 20_000 or len(json.dumps(deep)) < 15_000:
+        failures.append(f"trim did not cut to the floor: {len(json.dumps(deep))}")
 
 
 def test_config(failures: list[str]) -> None:
@@ -288,6 +341,8 @@ async def run() -> int:
     await test_failure_keeps_history(failures)
     await test_images(failures)
     await test_mcp_tools(failures)
+    await test_cacheable_prefix(failures)
+    test_usage_line(failures)
     test_trim(failures)
     test_config(failures)
     if failures:
