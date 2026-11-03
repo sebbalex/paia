@@ -32,6 +32,7 @@ from claude_agent_sdk import (
 )
 
 from .config import Config
+from .digest import ContextGate
 from .coach_report import ReportDesk
 from .gws import Gws, build_tools as build_gws_tools
 from .intervals import Intervals, build_tools as build_coach_tools
@@ -231,6 +232,9 @@ class Brain:
         self.icu = toolbox.icu
         self.routine_timeout_seconds = config.routine_timeout_seconds
         self._client: ClaudeSDKClient | None = None
+        # Recent context (memory/digest/ + today's messages) rides on the
+        # first chat turn of each day and on every routine.
+        self._context = ContextGate(config.root)
         self._session_id: str | None = None
         self._last_active = 0.0
         self._lock = asyncio.Lock()
@@ -359,6 +363,7 @@ class Brain:
         self, prompt: str, timeout: int | None = None, routine: bool = False
     ) -> Turn:
         limit = timeout or self._config.turn_timeout_seconds
+        prompt = self._context.wrap(prompt, routine=routine)
         if routine:
             return await self._ask_routine(prompt, limit)
         async with self._lock:

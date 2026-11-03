@@ -11,6 +11,7 @@ Personal assistant process. Read these in order, they are your operating system:
 .claude/skills/ methods you follow: one folder per skill  (you propose, the owner enables)
 memory/wiki/   authoritative facts, one entity per file  (you write these)
 memory/raw/    append-only conversation log, one file per day  (transport writes)
+memory/digest/ one short summary per past day  (nightly job writes)
 context/       the owner's briefs  (read-only to you: propose changes in memory/wiki/proposals/)
 scripts/       executable tools you may run
 skills/        vendored gws CLI docs  (reference only — not the skills above)
@@ -25,10 +26,14 @@ in `memory/raw/` and every wiki page, by words (SQLite FTS5) and by meaning (a
 local multilingual embedding model), on both brains. `tools/memory_eval.py`
 and `tools/memory_eval_agent.py` measure it against the owner's own questions.
 
+`memory/digest/` holds one model-written summary per past day (`scripts/digest.py`,
+run after the nightly distill); the last seven, plus the owner's messages so
+far today, ride on the first chat turn of each day and on every routine
+(`assistant/digest.py`).
+
 claude-mem is still installed as an MCP server while the two run side by side:
 `search`, `timeline`, `get_observations`, plus context injected at session
-start. It is due to go once `memory_search` and the session-start digest have
-proved themselves.
+start. It is due to go once the two have run side by side for a while.
 
 Read `ROT.md` for when to trust either. Short version: they find the thread,
 the wiki holds the truth.

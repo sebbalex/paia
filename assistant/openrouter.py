@@ -42,6 +42,7 @@ import httpx
 from claude_agent_sdk import _python_type_to_json_schema
 
 from .agent import INJECTION_GUARD, Turn, build_toolbox, owner_block
+from .digest import ContextGate
 from .config import Config
 from .policy import Policy
 
@@ -820,6 +821,7 @@ class OpenRouterBrain:
         )
         self._history_file = config.state_dir / "openrouter" / "history.json"
         self._messages = self._load()
+        self._context = ContextGate(config.root)
         self._lock = asyncio.Lock()
 
     async def ask(self, prompt: str, timeout: int | None = None,
@@ -834,6 +836,7 @@ class OpenRouterBrain:
             # the Claude backend (agent.Brain._ask_routine): what is in the
             # chat must not change what an unattended run decides.
             history = [] if routine else _trim(self._messages, HISTORY_CHARS, HISTORY_TRIM_TO)
+            prompt = self._context.wrap(prompt, routine=routine)
             messages = history + [{"role": "user", "content": stamped(prompt)}]
             try:
                 texts, ok = await asyncio.wait_for(self._loop.run(messages), timeout=limit)

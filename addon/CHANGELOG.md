@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.22
+
+- The assistant now starts each day knowing what has been going on. Every night, after distilling, it writes a short summary of each past day into memory/digest/; the last seven, plus what you have said today, are given to it on the first message of each day and on every routine, so it no longer depends on claude-mem for that. The first night after updating writes summaries for every day already in the log (one model call per day, once). Also fixed: the nightly distill ran at 03:30 against the new, empty day, so yesterday's conversation was never distilled into the wiki; before noon it now reads yesterday's log.
+
 ## 0.3.21
 
 - New memory_search tool: the assistant searches everything you have said to it and the wiki, by exact words and by meaning, in Italian and English, with dates ("ieri", "21 agosto", "last week"). It runs inside the add-on with a small local model (about 130 MB, downloaded once into /data on first use); nothing leaves the box, and it works on OpenRouter too. On a test of 52 questions written from real conversations, the assistant found the right exchange or wiki page for 96% of them. claude-mem stays installed alongside it for now. On a self-hosted install, RECALL_EMBED=0 in .env matches words only and skips the model.

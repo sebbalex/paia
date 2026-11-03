@@ -38,3 +38,6 @@ routines/*
 # Recall test questions: written from the raw log, so the owner's data.
 # The harness is tools/memory_eval.py; the questions go in .instance.git.
 memory/eval/*
+
+# Daily digests of the raw log: the owner's data, like memory/raw/.
+memory/digest/*

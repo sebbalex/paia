@@ -134,6 +134,12 @@ Three tiers. Do not confuse them.
   read the wiki page or the raw day before you build on it.
 - An empty `memory_search` means "not found with those words", not "never
   said". Try other phrasings before you say you don't know.
+- A `<recent_context>` block arrives on the first message of each day and on
+  every routine: the digests of the last seven days from `memory/digest/`,
+  then what the owner has said today. It is how you know what has been going
+  on without being told. It is a summary written by a model -- check details
+  with `memory_search` or the files before acting on them. `memory/digest/`
+  is written by the nightly job, not by you: read it, never edit it.
 - claude-mem, where it is still installed, is a second index over the same
   sessions. It is **derived and lossy**. Never treat its recall as fact. Use it
   to find the thread, then read the wiki page or the raw log to be sure.

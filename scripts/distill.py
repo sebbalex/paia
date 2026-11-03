@@ -5,14 +5,19 @@ Without this the raw log grows forever and the wiki stays empty, which means
 the assistant's only real memory is claude-mem's derived index — exactly the
 thing ROT.md says not to depend on. Run it from a systemd timer.
 
-Usage: python3 scripts/distill.py [YYYY-MM-DD]   (default: today)
+Usage: python3 scripts/distill.py [YYYY-MM-DD]
+  default: today, or yesterday when run before noon -- the add-on runs it at
+  03:30, when today's log is still empty and yesterday's is the one to read.
+
+After distilling it writes the daily digests (scripts/digest.py): the
+summaries the bot is given at session start.
 """
 
 from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import date
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -58,11 +63,32 @@ If the log has nothing worth keeping, write nothing and say so."""
 
 async def main() -> int:
     cfg = config_module.load()
-    day = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
+    day = sys.argv[1] if len(sys.argv) > 1 else default_day(datetime.now())
     log_path = cfg.raw_memory_dir / f"{day}.md"
-    if not log_path.exists():
-        print(f"no log for {day}, nothing to distil")
-        return 0
+    try:
+        if not log_path.exists():
+            print(f"no log for {day}, nothing to distil")
+            return 0
+        return await distil(cfg, log_path)
+    finally:
+        await digests(cfg)
+
+
+def default_day(now: datetime) -> str:
+    return (now.date() - timedelta(days=1 if now.hour < 12 else 0)).isoformat()
+
+
+async def digests(cfg) -> None:
+    """Catch up the daily digests; a failure here never fails the distill."""
+    from assistant import digest
+    try:
+        done = await digest.catch_up(cfg.root, digest.summariser(cfg))
+        print(f"digests written: {', '.join(done) or 'none due'}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"digests failed: {exc}")
+
+
+async def distil(cfg, log_path: Path) -> int:
 
     options = ClaudeAgentOptions(
         cwd=str(cfg.root),

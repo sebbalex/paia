@@ -482,3 +482,12 @@ def eval_search(query: str, k: int, now: datetime | None) -> list[str]:
         last = _EVAL.db.execute("SELECT max(ts) FROM units WHERE kind = 'raw'").fetchone()[0]
         now = datetime.fromisoformat(last) + timedelta(hours=1)
     return [r["id"] for r in _EVAL.search(query, k, now)]
+
+
+def context(now: datetime) -> str:
+    """Eval hook: the recent-context block the bot gets at `now`."""
+    import os
+
+    from .digest import context_block
+    root = Path(os.environ.get("ASSISTANT_ROOT", Path(__file__).resolve().parent.parent))
+    return context_block(root, now)
