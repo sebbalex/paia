@@ -50,7 +50,7 @@ RUN HOME=/root bash -c 'curl -fsSL https://bun.sh/install | bash' \
 RUN npm install -g --omit=dev \
       @anthropic-ai/claude-code \
       @googleworkspace/cli \
-      claude-mem \
+      claude-mem@15.9.0 \
  && npm cache clean --force
 
 # Python dependencies in their own venv: Debian's interpreter is

@@ -216,11 +216,52 @@ def test_google() -> None:
               isinstance(out, str) and ".apps.googleusercontent.com" in out, str(out))
 
 
+def test_observer() -> None:
+    print("observer_credentials")
+    uid, gid = os.getuid(), os.getgid()
+    with tempfile.TemporaryDirectory() as t:
+        E.HOME = Path(t)
+        mem_env = E.HOME / ".claude-mem" / ".env"
+        creds = E.HOME / ".claude" / ".credentials.json"
+        mem_env.parent.mkdir()
+        mem_env.write_text("CLAUDE_MEM_MODEL=haiku\n")
+
+        E.observer_credentials({"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat-1"}, uid, gid)
+        data = json.loads(creds.read_text())
+        check("subscription token written for the observer",
+              data == {"claudeAiOauth": {"accessToken": "sk-ant-oat-1"}}, str(data))
+        check("credentials private", creds.stat().st_mode & 0o777 == 0o600)
+        check("no api key in claude-mem .env", "ANTHROPIC_API_KEY" not in mem_env.read_text())
+
+        E.observer_credentials({"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat-2"}, uid, gid)
+        check("rotated token follows",
+              "sk-ant-oat-2" in creds.read_text() and "oat-1" not in creds.read_text())
+
+        E.observer_credentials({"ANTHROPIC_API_KEY": "sk-ant-api-9"}, uid, gid)
+        text = mem_env.read_text()
+        check("api key goes to claude-mem .env", "ANTHROPIC_API_KEY=sk-ant-api-9" in text, text)
+        check("other .env lines kept", "CLAUDE_MEM_MODEL=haiku" in text, text)
+        check("own token file removed on switch", not creds.exists())
+
+        E.observer_credentials({"OPENROUTER_API_KEY": "sk-or-1"}, uid, gid)
+        check("api key dropped when Claude is gone",
+              "ANTHROPIC_API_KEY" not in mem_env.read_text())
+
+        real = {"claudeAiOauth": {"accessToken": "a", "refreshToken": "r"}}
+        creds.parent.mkdir(exist_ok=True)
+        creds.write_text(json.dumps(real))
+        E.observer_credentials({"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat-3"}, uid, gid)
+        check("a real login is left alone", json.loads(creds.read_text()) == real)
+        E.observer_credentials({}, uid, gid)
+        check("a real login survives a provider switch", creds.exists())
+
+
 def main() -> int:
     test_import()
     test_llm()
     test_google()
     test_brief_sync()
+    test_observer()
     if FAILURES:
         print("\n".join(["", "FAILURES:", *FAILURES]))
         return 1

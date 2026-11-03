@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.20
+
+- claude-mem remembers again. Its observer — the part that turns each session into memory — signs in on its own and never saw the add-on's Claude credential, so every observation failed with "could not authenticate the observer" and nothing new was remembered. Each start now hands it the credential: a subscription token in ~/.claude/.credentials.json, an API key in ~/.claude-mem/.env. claude-mem is pinned to 15.9.0 so an image rebuild no longer changes how it signs in. /selftest now fails the claude-mem line when the observer is failing, instead of reporting the worker ready.
+
 ## 0.3.19
 
 - Cheaper model calls on OpenRouter. The system prompt no longer carries the clock, which changed it every minute and stopped any provider from caching it; the time now goes in front of each of your messages. Anthropic models get cache breakpoints, so each tool step reads the conversation from cache. Long chats are trimmed once, from 200k down to 100k characters, rather than a little on every message.

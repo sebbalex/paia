@@ -582,6 +582,62 @@ def install_claude_mem(env: dict[str, str], uid: int, gid: int) -> None:
     os.chown(marker, uid, gid)
 
 
+def _env_lines(path: Path, key: str, value: str | None) -> None:
+    """Set or drop one KEY=value line, keeping every other line as it was."""
+    lines = path.read_text().splitlines() if path.is_file() else []
+    kept = [line for line in lines if not line.startswith(f"{key}=")]
+    if value is not None:
+        kept.append(f"{key}={value}")
+    if kept == lines:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"{line}\n" for line in kept))
+    os.chmod(path, 0o600)
+
+
+def _ours(credentials: Path) -> bool:
+    """A credentials file this entrypoint wrote: a bare token, no refresh token.
+
+    One a real `claude` login left behind carries a refreshToken and is left
+    alone -- it is a better credential than anything written here.
+    """
+    try:
+        oauth = json.loads(credentials.read_text()).get("claudeAiOauth") or {}
+    except (OSError, ValueError, AttributeError):
+        return False
+    return isinstance(oauth, dict) and "refreshToken" not in oauth
+
+
+def observer_credentials(env: dict[str, str], uid: int, gid: int) -> None:
+    """Hand the add-on's Claude credential to claude-mem's observer, every boot.
+
+    The observer does not inherit the bot's environment: claude-mem strips
+    ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN from it on purpose, takes an
+    API key only from ~/.claude-mem/.env, and looks for a subscription login
+    in ~/.claude/.credentials.json, then the OS keychain (no `secret-tool`
+    here). Without one of those it runs `claude` signed out and every
+    observation fails with "could not authenticate the observer". Rewritten
+    at each start so a changed or rotated credential follows.
+    """
+    mem_env = HOME / ".claude-mem" / ".env"
+    credentials = HOME / ".claude" / ".credentials.json"
+    key = env.get("ANTHROPIC_API_KEY")
+    token = env.get("CLAUDE_CODE_OAUTH_TOKEN")
+
+    _env_lines(mem_env, "ANTHROPIC_API_KEY", key or None)
+    if token and not key:
+        if not credentials.exists() or _ours(credentials):
+            credentials.parent.mkdir(parents=True, exist_ok=True)
+            credentials.write_text(json.dumps({"claudeAiOauth": {"accessToken": token}}))
+            os.chmod(credentials, 0o600)
+    elif credentials.exists() and _ours(credentials):
+        credentials.unlink()
+
+    for path in (mem_env, credentials, mem_env.parent, credentials.parent):
+        if path.exists():
+            os.chown(path, uid, gid)
+
+
 def _next_distill(hour: int, after: datetime) -> datetime:
     when = after.replace(hour=hour, minute=30, second=0, microsecond=0)
     return when if when > after else when + timedelta(days=1)
@@ -664,6 +720,7 @@ def main() -> int:
         import_state()
     own(account.pw_uid, account.pw_gid)
     install_claude_mem(env, account.pw_uid, account.pw_gid)
+    observer_credentials(env, account.pw_uid, account.pw_gid)
 
     hour = options.get("distill_hour")
     distill_hour = int(hour) if isinstance(hour, int) and 0 <= hour <= 23 else None

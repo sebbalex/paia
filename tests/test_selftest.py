@@ -183,6 +183,17 @@ def main() -> int:
     check("missing skill named", r.state == "fail" and "`ghost`" in r.detail, r.detail)
     check("skills ok", S.check_skills(cfg(tmp, skills=("coach",))).state == "ok")
 
+    print("claude-mem observer")
+    health = tmp / "observer-health.json"
+    check("no health file is ok", S.observer_health(health).state == "ok")
+    health.write_text('{"consecutiveFailures": 0, "failingSinceAt": null}')
+    check("recording is ok", S.observer_health(health).state == "ok")
+    health.write_text('{"consecutiveFailures": 223, "failingSinceAt": 1793185164187,'
+                      ' "lastErrorMessage": "Claude Code could not authenticate the observer"}')
+    r = S.observer_health(health)
+    check("failing observer fails", r.state == "fail" and "223 in a row" in r.detail
+          and "could not authenticate" in r.detail, r.detail)
+
     print("runner")
 
     async def slow():

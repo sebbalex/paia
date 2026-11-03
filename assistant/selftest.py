@@ -254,7 +254,26 @@ async def check_memory(cfg) -> Result:
         return Result("claude-mem", "warn", "worker not running now; it starts with the next chat session")
     if response.status_code != 200:
         return Result("claude-mem", "fail", f"worker answered HTTP {response.status_code}")
-    return Result("claude-mem", "ok", "worker ready")
+    return observer_health(settings.parent / "observer-health.json")
+
+
+def observer_health(path: Path) -> Result:
+    """A ready worker can still be recording nothing: the observer that
+    compresses each session signs in on its own, and fails quietly when it
+    cannot."""
+    try:
+        health = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return Result("claude-mem", "ok", "worker ready")
+    failures = health.get("consecutiveFailures") or 0
+    if not failures:
+        return Result("claude-mem", "ok", "worker ready, observer recording")
+    since = health.get("failingSinceAt")
+    when = datetime.fromtimestamp(since / 1000).strftime("%Y-%m-%d %H:%M") if since else "?"
+    why = _clean(str(health.get("lastErrorMessage") or "unknown error"), 120)
+    return Result("claude-mem", "fail",
+                  f"observer failing since {when} ({failures} in a row): {why}. "
+                  "Nothing new is remembered; a restart rewrites its credentials")
 
 
 def check_routines(cfg, delivery) -> Result:
