@@ -34,3 +34,7 @@ memory/wiki/*
 routines/*
 !routines/.gitkeep
 .instance.git/
+
+# Recall test questions: written from the raw log, so the owner's data.
+# The harness is tools/memory_eval.py; the questions go in .instance.git.
+memory/eval/*
