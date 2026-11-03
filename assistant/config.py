@@ -69,6 +69,10 @@ class Config:
 
     # Hard ceiling on one turn, so a runaway tool loop can't wedge the bot.
     turn_timeout_seconds: int = 300
+    # A chat session whose context passes this many tokens a call starts
+    # afresh on the next turn: every call re-reads the whole context, and at
+    # 540k a few tool calls ran past turn_timeout_seconds.
+    session_max_tokens: int = 150_000
     # A routine does a whole job alone -- the Sunday coach report reads a
     # dozen sources and writes a long text -- so it gets its own ceiling.
     routine_timeout_seconds: int = 900
@@ -319,6 +323,7 @@ def load() -> Config:
         intervals_athlete_id=os.environ.get("INTERVALS_ATHLETE_ID", "").strip(),
         hrv_cutover_date=hrv_cutover,
         routine_timeout_seconds=int(os.environ.get("ROUTINE_TIMEOUT_SECONDS", "") or 900),
+        session_max_tokens=int(os.environ.get("SESSION_MAX_TOKENS", "") or 150_000),
         mail_to=(os.environ.get("MAIL_TO") or os.environ.get("SMTP_TO") or "").strip(),
         context_target=(Path(os.environ["ASSISTANT_CONTEXT_TARGET"])
                         if os.environ.get("ASSISTANT_CONTEXT_TARGET", "").strip() else None),

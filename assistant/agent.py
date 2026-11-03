@@ -8,7 +8,13 @@ remembered at all. We keep one session open for `idle_timeout_seconds` after
 the last message, then close it cleanly and let the hooks do their work.
 
 The session id is persisted so a restart resumes the same thread instead of
-waking up amnesiac.
+waking up amnesiac -- but not for ever. A session resumed for weeks grew to
+540k tokens, every call re-read all of it, and turns ran past the timeout.
+The chat starts a fresh session each day (the day turns at DAY_STARTS_AT, so
+a conversation past midnight keeps its thread) and early when one call's
+context passes `session_max_tokens`. Continuity across sessions is the
+digests and memory_search: the first turn of a new session carries the
+recent-context block.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -103,6 +110,10 @@ Everything the machine reads stays English.
 
 
 log = logging.getLogger(__name__)
+
+# The chat's day turns over at 04:00, after the nightly distill and digests
+# (03:30), not at midnight in the middle of a late conversation.
+DAY_STARTS_AT = 4
 
 
 def usage_line(result: ResultMessage) -> str:
@@ -236,6 +247,10 @@ class Brain:
         # first chat turn of each day and on every routine.
         self._context = ContextGate(config.root)
         self._session_id: str | None = None
+        # The day the chat session started on, and whether its context has
+        # outgrown session_max_tokens: either starts the next turn afresh.
+        self._session_day: str | None = None
+        self._oversized = False
         self._last_active = 0.0
         self._lock = asyncio.Lock()
         self._session_file: Path = config.state_dir / "session_id"
@@ -363,10 +378,19 @@ class Brain:
         self, prompt: str, timeout: int | None = None, routine: bool = False
     ) -> Turn:
         limit = timeout or self._config.turn_timeout_seconds
-        prompt = self._context.wrap(prompt, routine=routine)
         if routine:
+            prompt = self._context.wrap(prompt, routine=True)
             return await self._ask_routine(prompt, limit)
         async with self._lock:
+            why = self._session_stale()
+            if why:
+                log.info("starting a fresh chat session: %s", why)
+                await self._close_locked()
+                self._forget_session_id()
+                # A new session knows nothing: give its first turn the
+                # recent-context block even if today's turn already had it.
+                self._context.day = None
+            prompt = self._context.wrap(prompt)
             client = await self._ensure_client()
             self._last_active = time.monotonic()
             self._policy.begin_turn(routine=routine)
@@ -439,6 +463,7 @@ class Brain:
                 log.info("turn: %s", usage_line(message))
                 if keep_session and getattr(message, "session_id", None):
                     self._store_session_id(message.session_id)
+                    self._check_size(message)
                 # An auth failure or API error arrives as ordinary assistant
                 # text -- "API Error: 401 ..." reads exactly like a reply. Only
                 # is_error distinguishes them.
@@ -451,23 +476,54 @@ class Brain:
 
     # -- session id persistence -------------------------------------------
 
+    def _today(self) -> str:
+        now = self._context.clock() - timedelta(hours=DAY_STARTS_AT)
+        return now.date().isoformat()
+
+    def _session_stale(self) -> str | None:
+        """Why the chat session should start over before this turn, or None."""
+        if self._oversized:
+            return f"context passed {self._config.session_max_tokens} tokens"
+        if self._load_session_id() and self._session_day != self._today():
+            return f"started {self._session_day or 'on an unknown day'}"
+        return None
+
+    def _check_size(self, result: ResultMessage) -> None:
+        """Mark the session for a fresh start once one call's context -- what
+        every further call re-reads -- passes session_max_tokens."""
+        usage = getattr(result, "usage", None) or {}
+        total = (usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                 + usage.get("cache_creation_input_tokens", 0))
+        per_call = total // max(1, getattr(result, "num_turns", 1) or 1)
+        if per_call > self._config.session_max_tokens:
+            log.info("session context ~%d tokens a call: next turn starts fresh", per_call)
+            self._oversized = True
+
     def _load_session_id(self) -> str | None:
+        """state/session_id: the id, then the day the session started on. A
+        file from before the day line has no day, so it starts over."""
         if self._session_id:
             return self._session_id
         try:
-            value = self._session_file.read_text(encoding="utf-8").strip()
+            lines = self._session_file.read_text(encoding="utf-8").split()
         except OSError:
             return None
-        self._session_id = value or None
+        self._session_id = lines[0] if lines else None
+        self._session_day = lines[1] if len(lines) > 1 else None
         return self._session_id
 
     def _store_session_id(self, session_id: str) -> None:
         if session_id == self._session_id:
             return
         self._session_id = session_id
+        # A resume that hands back a new id is still the same session: keep
+        # the day it started on.
+        self._session_day = self._session_day or self._today()
         self._session_file.parent.mkdir(parents=True, exist_ok=True)
-        self._session_file.write_text(session_id, encoding="utf-8")
+        self._session_file.write_text(f"{session_id}\n{self._session_day}\n", encoding="utf-8")
 
     def _forget_session_id(self) -> None:
         self._session_id = None
+        self._session_day = None
+        self._oversized = False
         self._session_file.unlink(missing_ok=True)

@@ -147,10 +147,98 @@ def test_usage_line(failures: list[str]) -> None:
         failures.append(f"usage line without usage: {usage_line(bare)!r}")
 
 
+class SizedClient(FakeClient):
+    """A chat client whose turns report `per_call` tokens of context."""
+
+    per_call = 1000
+
+    async def receive_response(self):
+        yield ResultMessage(
+            subtype="success", duration_ms=1, duration_api_ms=1, is_error=False,
+            num_turns=2, session_id=f"session-{len(FakeClient.made)}",
+            usage={"input_tokens": 0, "cache_read_input_tokens": 2 * SizedClient.per_call,
+                   "cache_creation_input_tokens": 0, "output_tokens": 1},
+        )
+
+
+async def test_rotation(failures: list[str]) -> None:
+    """The chat session starts afresh on a new day and when it grows too big;
+    each fresh one gets the recent-context block on its first turn."""
+    from datetime import datetime
+
+    root = make_root()
+    (root / "memory" / "digest").mkdir(parents=True)
+    (root / "memory" / "digest" / "2026-11-02.md").write_text("# 2026-11-02\n\n- digest line\n")
+    config = Config(
+        root=root, smtp=SmtpConfig("", 587, "", "", "", ""), bot_token="x",
+        allowed_user_ids=frozenset({1}), model="claude-test", gws_bin="",
+        session_max_tokens=100_000,
+    )
+    sid = root / "state" / "session_id"
+    sid.write_text("old-session")  # the pre-day-line format
+    brain = Brain(config)
+    clock = [datetime(2026, 11, 3, 10, 0)]
+    brain._context.clock = lambda: clock[0]
+    FakeClient.made = []
+    brain._client_factory = SizedClient
+    brain._ensure_client = lambda: _open(brain)
+
+    await brain.ask("ciao")
+    first = FakeClient.made[-1]
+    if first.resume is not None:
+        failures.append(f"a session file without a day was resumed: {first.resume}")
+    if sid.read_text().split() != ["session-1", "2026-11-03"]:
+        failures.append(f"session file: {sid.read_text()!r}")
+    if not first.prompts[0].startswith("<recent_context"):
+        failures.append("a fresh session's first turn had no recent context")
+
+    await brain.ask("ancora")
+    if FakeClient.made[-1] is not first or first.prompts[-1] != "ancora":
+        failures.append("the same day did not stay in the same session")
+
+    clock[0] = datetime(2026, 11, 4, 1, 30)
+    await brain.ask("tardi")
+    if FakeClient.made[-1] is not first:
+        failures.append("a turn past midnight, before 04:00, started a new session")
+
+    clock[0] = datetime(2026, 11, 4, 8, 0)
+    await brain.ask("buongiorno")
+    second = FakeClient.made[-1]
+    if second is first or not first.closed or second.resume is not None:
+        failures.append("a new day did not close the old session and start fresh")
+
+    SizedClient.per_call = 120_000
+    await brain.ask("grande")
+    SizedClient.per_call = 1000
+    if FakeClient.made[-1] is not second:
+        failures.append("the oversized turn itself was cut off")
+    await brain.ask("dopo")
+    third = FakeClient.made[-1]
+    if third is second or third.resume is not None:
+        failures.append("an oversized session was resumed")
+    if not third.prompts[0].startswith("<recent_context"):
+        failures.append("a session restarted for size had no recent context")
+
+    # A restart reads the day back and resumes the same day's session.
+    again = Brain(config)
+    again._context.clock = lambda: clock[0]
+    if again._session_stale() is not None or again._load_session_id() != "session-3":
+        failures.append(f"a restart did not resume today's session: {sid.read_text()!r}")
+
+
+async def _open(brain: Brain):
+    if brain._client is None:
+        client = brain._client_factory(brain._options(brain._load_session_id()))
+        await client.connect()
+        brain._client = client
+    return brain._client
+
+
 async def run() -> int:
     failures: list[str] = []
     test_usage_line(failures)
     await test_claude(failures)
+    await test_rotation(failures)
     await test_openrouter(failures)
     if failures:
         print("FAILED:")
