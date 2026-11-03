@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.21
+
+- New memory_search tool: the assistant searches everything you have said to it and the wiki, by exact words and by meaning, in Italian and English, with dates ("ieri", "21 agosto", "last week"). It runs inside the add-on with a small local model (about 130 MB, downloaded once into /data on first use); nothing leaves the box, and it works on OpenRouter too. On a test of 52 questions written from real conversations, the assistant found the right exchange or wiki page for 96% of them. claude-mem stays installed alongside it for now. On a self-hosted install, RECALL_EMBED=0 in .env matches words only and skips the model.
+
 ## 0.3.20
 
 - claude-mem remembers again. Its observer — the part that turns each session into memory — signs in on its own and never saw the add-on's Claude credential, so every observation failed with "could not authenticate the observer" and nothing new was remembered. Each start now hands it the credential: a subscription token in ~/.claude/.credentials.json, an API key in ~/.claude-mem/.env. claude-mem is pinned to 15.9.0 so an image rebuild no longer changes how it signs in. /selftest now fails the claude-mem line when the observer is failing, instead of reporting the worker ready.

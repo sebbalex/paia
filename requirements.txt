@@ -16,6 +16,14 @@ croniter>=2.0
 # rather than guessed at.
 pypdf>=6.0
 
+# memory_search (assistant/recall.py): multilingual-e5-small on onnxruntime,
+# its tokenizer, and the hub client that downloads it once into models/. All
+# three already arrive with faster-whisper; named here so dropping voice does
+# not silently drop recall by meaning.
+onnxruntime>=1.17
+tokenizers>=0.15
+huggingface_hub>=0.20
+
 # Charts for the coach's reports (assistant/coach_charts.py), drawn to PNG
 # with the Agg backend: no display, no system fonts needed (ships DejaVu).
 matplotlib>=3.8

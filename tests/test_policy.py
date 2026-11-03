@@ -147,6 +147,10 @@ def main() -> int:
           *verdict("mcp__mcp-search__search")[:1], want=True)
     check("get_observations",
           *verdict("mcp__plugin_claude-mem_mcp-search__get_observations")[:1], want=True)
+    check("in-process memory_search",
+          *verdict("mcp__memory__memory_search", queries=["x"])[:1], want=True)
+    check("no other tool on the memory server",
+          *verdict("mcp__memory__memory_delete")[:1], want=False)
     check("smart_search stays out (it is code search)",
           *verdict("mcp__plugin_claude-mem_mcp-search__smart_search")[:1], want=False)
     check("another MCP server does not pass",

@@ -5,7 +5,8 @@ with it: the Claude Code CLI and its built-in tools (Read, Write, Edit, Glob,
 Grep, WebFetch, WebSearch, Skill), a session the CLI keeps and resumes, and the
 claude-mem plugin. None of that exists for a model reached over OpenRouter's
 chat completions API, so this module supplies the first two itself and goes
-without the third.
+without the third -- recall comes from memory_search, an in-process tool like
+the others.
 
 What does not change is everything that decides what the model may touch. The
 in-process tools are the very objects agent.build_toolbox() hands the SDK --
@@ -549,8 +550,9 @@ Each of the owner's messages starts with the local time it was sent, in
 square brackets: that is "now".
 
 The files below mention claude-mem (search, get_observations, timeline). It is
-not running in this deployment: those tools do not exist. Recall comes from
-memory/wiki/ first and memory/raw/YYYY-MM-DD.md for what was said on a day.
+not running in this deployment: those tools do not exist. Recall is
+memory_search, which covers memory/raw/ and memory/wiki/; the wiki is the
+truth, memory/raw/YYYY-MM-DD.md is what was said on a day.
 
 Call tools whenever the job needs them, several in a row if it does, and
 answer only when you have what you need. A tool refused by policy comes back

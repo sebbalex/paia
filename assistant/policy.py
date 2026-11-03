@@ -102,6 +102,10 @@ _MEMORY_TOOL = re.compile(
     # name ending in "\n" would satisfy an anchored pattern.
     r"\Amcp__[\w-]*mcp-search__(search|get_observations|timeline)\Z"
 )
+# The in-process recall (assistant/memory_tools.py): reads memory/raw/ and
+# memory/wiki/, both already readable, through an index in state/ the model
+# never names. One tool, no arguments that reach a path.
+_RECALL_TOOL = "mcp__memory__memory_search"
 
 # Google Workspace, through the in-process tools in assistant/gws.py. That
 # module already refuses any method outside its own table, so this is the
@@ -286,7 +290,7 @@ class Policy:
     # -- the decision ------------------------------------------------------
 
     def check(self, tool: str, tool_input: dict) -> Decision:
-        if tool in _FREE_TOOLS or _MEMORY_TOOL.match(tool):
+        if tool in _FREE_TOOLS or tool == _RECALL_TOOL or _MEMORY_TOOL.match(tool):
             return Decision(True, "no filesystem or network target")
 
         if tool.startswith("mcp__gws__"):

@@ -120,10 +120,22 @@ Three tiers. Do not confuse them.
 | Question | Store |
 |---|---|
 | "What is true about X?" | `memory/wiki/x.md` — authoritative |
-| "Did we ever discuss X?" | claude-mem MCP (`search`, then `get_observations`) |
+| "Did we ever discuss X?" | `memory_search`, then the file it points to |
 | "What was said on Tuesday?" | `memory/raw/YYYY-MM-DD.md` — append-only log |
 
-- claude-mem is **derived and lossy**. Never treat its recall as fact. Use it
+- **`memory_search` is the first place to look** for anything said before
+  this conversation: before "I don't remember", before asking the owner
+  something they may already have told you, whenever they say "come ti avevo
+  detto" or name a past thing. It searches every exchange in `memory/raw/` and
+  every wiki page, by exact words and by meaning, in either language. Give it
+  1-3 phrasings: their words, a keyword form, the other language. Put the date
+  in the query when there is one ("21 agosto", "ieri", "last week"): it
+  narrows the days searched. A hit is a lead, not a fact -- it names the file;
+  read the wiki page or the raw day before you build on it.
+- An empty `memory_search` means "not found with those words", not "never
+  said". Try other phrasings before you say you don't know.
+- claude-mem, where it is still installed, is a second index over the same
+  sessions. It is **derived and lossy**. Never treat its recall as fact. Use it
   to find the thread, then read the wiki page or the raw log to be sure.
 - Recall is two steps, in this order: `search` returns an index of ids, then
   `get_observations` fetches detail for the ids worth reading. Fetching detail

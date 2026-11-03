@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +35,9 @@ from .config import Config
 from .coach_report import ReportDesk
 from .gws import Gws, build_tools as build_gws_tools
 from .intervals import Intervals, build_tools as build_coach_tools
+from .memory_tools import build_tools as build_memory_tools
 from .policy import Policy
+from .recall import Recall
 from .scrape import Scraper, build_tools as build_scrape_tools
 
 
@@ -178,7 +181,24 @@ def build_toolbox(config: Config) -> Toolbox:
     desk = ReportDesk()
     if icu.enabled:
         servers["coach"] = build_coach_tools(icu, desk=desk)
+    # Recall over memory/raw/ and memory/wiki/, in-process: words through
+    # SQLite FTS5, meaning through a small local embedding model. Same tool on
+    # both brains. The index is warmed in the background so the first search
+    # does not pay for the first build (a minute or two on a small box).
+    recall = Recall(config.root, config.state_dir / "recall.db",
+                    config.models_dir, embed=config.recall_embed)
+    threading.Thread(target=_warm, args=(recall,), name="recall-warm", daemon=True).start()
+    servers["memory"] = build_memory_tools(recall)
     return Toolbox(servers=servers, icu=icu, report_desk=desk)
+
+
+def _warm(recall: Recall) -> None:
+    try:
+        changed = recall.refresh()
+        log.info("recall: index ready (%d files re-read, embeddings %s)",
+                 changed, "on" if recall.embed_enabled else "off")
+    except Exception:  # noqa: BLE001 - a cold index is rebuilt on first search
+        log.exception("recall: warm-up failed")
 
 
 def make_brain(config: Config):

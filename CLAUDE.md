@@ -20,12 +20,18 @@ deploy/        systemd units
 
 ## Memory tools
 
-claude-mem is active as an MCP server. It gives you semantic recall over every
-past session: `search`, `smart_search`, `timeline`, `get_observations`.
-It also injects relevant past context automatically at session start.
+`memory_search` (in-process, `assistant/recall.py`) searches every exchange
+in `memory/raw/` and every wiki page, by words (SQLite FTS5) and by meaning (a
+local multilingual embedding model), on both brains. `tools/memory_eval.py`
+and `tools/memory_eval_agent.py` measure it against the owner's own questions.
 
-Read `ROT.md` for when to trust it. Short version: it finds the thread, the
-wiki holds the truth.
+claude-mem is still installed as an MCP server while the two run side by side:
+`search`, `timeline`, `get_observations`, plus context injected at session
+start. It is due to go once `memory_search` and the session-start digest have
+proved themselves.
+
+Read `ROT.md` for when to trust either. Short version: they find the thread,
+the wiki holds the truth.
 
 ## Current state
 

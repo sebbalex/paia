@@ -230,6 +230,19 @@ def date_window(query: str, now: datetime) -> tuple[date, date] | None:
     return None
 
 
+def _excerpt(text: str, n: int | None, query: str) -> str:
+    """The part of a unit worth showing: the owner's message, then the passage
+    that matched -- by meaning if the model picked one, else by shared words."""
+    parts = passages(text)
+    if n is None or n >= len(parts):
+        words = {w for w in _TOKEN.findall(query.lower()) if w not in _STOP}
+        n = max(range(len(parts)),
+                key=lambda i: len(words & set(_TOKEN.findall(parts[i].lower()))))
+    if n == 0 or not text.lstrip().startswith("[owner"):
+        return parts[n]
+    return f"{parts[0][:400]} … {parts[n]}"
+
+
 # -- the index ---------------------------------------------------------------------
 
 
@@ -340,12 +353,12 @@ class Recall:
     def _vectors(self):
         if self._matrix is None:
             import numpy as np
-            rows = self.db.execute("SELECT unit, vec FROM vectors").fetchall()
+            rows = self.db.execute("SELECT unit, n, vec FROM vectors").fetchall()
             if not rows:
-                self._matrix = ([], np.zeros((0, DIM), np.float32))
+                self._matrix = ([], [], np.zeros((0, DIM), np.float32))
             else:
-                self._matrix = ([r[0] for r in rows],
-                                np.vstack([np.frombuffer(r[1], np.float32) for r in rows]))
+                self._matrix = ([r[0] for r in rows], [r[1] for r in rows],
+                                np.vstack([np.frombuffer(r[2], np.float32) for r in rows]))
         return self._matrix
 
     # -- search -----------------------------------------------------------------
@@ -375,14 +388,16 @@ class Recall:
             ranked.append([r[0] for r in rows if allowed(r[0])][:POOL])
 
         emb = None if bare else self.embedder()
+        best_n: dict[str, int] = {}
         if emb is not None:
-            ids, matrix = self._vectors()
+            ids, ns, matrix = self._vectors()
             if len(ids):
                 scores = matrix @ emb([core], "query")[0]
                 best: dict[str, float] = {}
-                for uid, s in zip(ids, scores):
+                for uid, n, s in zip(ids, ns, scores):
                     if allowed(uid) and s > best.get(uid, -1.0):
                         best[uid] = float(s)
+                        best_n[uid] = n
                 ranked.append(sorted(best, key=best.get, reverse=True)[:POOL])
 
         fused: dict[str, float] = {}
@@ -412,8 +427,35 @@ class Recall:
         out = []
         for uid in raw + wiki:
             text = self.db.execute("SELECT text FROM units WHERE id = ?", (uid,)).fetchone()[0]
-            out.append({"id": uid, "when": ts[uid], "text": text})
+            out.append({"id": uid, "when": ts[uid], "text": text,
+                        "excerpt": _excerpt(text, best_n.get(uid), core)})
         return out
+
+    def search_many(self, queries: list[str], k: int = 5,
+                    now: datetime | None = None) -> list[dict]:
+        """Several phrasings of one question, merged: each one's best stay in."""
+        self.refresh()
+        runs = [self.search(q, k, now) for q in queries if q.strip()]
+        score: dict[str, float] = {}
+        first: dict[str, dict] = {}
+        for run in runs:
+            for r, hit in enumerate(x for x in run if x["id"].startswith("raw:")):
+                score[hit["id"]] = score.get(hit["id"], 0.0) + 1.0 / (RRF_K + r + 1)
+                first.setdefault(hit["id"], hit)
+            for r, hit in enumerate(x for x in run if x["id"].startswith("wiki:")):
+                score[hit["id"]] = score.get(hit["id"], 0.0) + 1.0 / (RRF_K + r + 1)
+                first.setdefault(hit["id"], hit)
+        keep = []
+        for run in runs:
+            for hit in [x for x in run if x["id"].startswith("raw:")][:TOP_EACH]:
+                if hit["id"] not in keep:
+                    keep.append(hit["id"])
+        raw = sorted((u for u in score if u.startswith("raw:")), key=score.get, reverse=True)
+        raw = (keep + [u for u in raw if u not in keep])[:k]
+        raw.sort(key=lambda u: -score[u])
+        wiki = sorted((u for u in score if u.startswith("wiki:")), key=score.get,
+                      reverse=True)[:WIKI_SLOTS]
+        return [first[u] for u in raw + wiki]
 
     def _weights(self, n: int) -> list[float]:
         # words first, meaning second; with both, meaning leads (see the eval)

@@ -112,6 +112,11 @@ class Config:
     # the sensible compromise for Italian on CPU; "base" is faster but gets
     # proper nouns wrong, "medium" wants more RAM than a 4 GB VPS has.
     whisper_model: str = "small"
+    # Recall by meaning (assistant/recall.py): a ~130 MB multilingual model,
+    # downloaded once into models/. Off, and memory_search matches words only.
+    # Off by default here so a Config built by hand (tests, scripts) never
+    # downloads it; load() turns it on unless RECALL_EMBED says otherwise.
+    recall_embed: bool = False
     whisper_compute_type: str = "int8"
     # None = automatic language detection, so Italian and English on the same
     # day both work without a config change.
@@ -330,6 +335,7 @@ def load() -> Config:
             use_tls=os.environ.get("SMTP_TLS", "1").strip() != "0",
         ),
         whisper_model=os.environ.get("WHISPER_MODEL", "small"),
+        recall_embed=os.environ.get("RECALL_EMBED", "1").strip().lower() not in ("0", "false", "no", "off"),
         whisper_language=language or None,
         whisper_vocabulary=", ".join(
             v for v in (owner, Config.whisper_vocabulary) if v
