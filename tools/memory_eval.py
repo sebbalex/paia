@@ -26,6 +26,7 @@ Files (JSON Lines):
 
 A retriever is `module:function`:
   search(query: str, k: int, now: datetime | None) -> list[str]  (unit ids)
+      scored on its first k exchange ids plus its first WIKI_K wiki ids
   context(now: datetime) -> str      optional, same module, for context.jsonl
 
 Usage:
@@ -58,6 +59,8 @@ HEADER = re.compile(r"^### (\w+) — (\d\d:\d\d:\d\d)\s*$", re.M)
 PASS_RECALL_AT_5 = 0.90
 PASS_CATEGORY_AT_5 = 0.80
 PASS_CONTEXT = 0.75
+# Wiki pages a retriever may return beside its k exchanges.
+WIKI_K = 2
 
 
 @dataclass
@@ -170,7 +173,11 @@ def run(questions, cases, search, context, k: int = 5) -> bool:
     by_cat: dict[str, list[tuple[bool, bool, float]]] = defaultdict(list)
     misses = []
     for q in questions:
-        found = search(q["q"], k, _now(q.get("now")))[:k]
+        found = search(q["q"], k, _now(q.get("now")))
+        # Exchanges and wiki pages are ranked apart: k of the first, WIKI_K of
+        # the second, the way the bot is shown them.
+        found = ([f for f in found if not f.startswith("wiki:")][:k]
+                 + [f for f in found if f.startswith("wiki:")][:WIKI_K])
         rank = next((i for i, f in enumerate(found) if hit(q["gold"], f)), None)
         by_cat[q["category"]].append((rank == 0, rank is not None,
                                       1 / (rank + 1) if rank is not None else 0.0))
