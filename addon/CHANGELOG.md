@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.24
+
+- Update Section11
+
 ## 0.3.23
 
 - Chat turns no longer run out of time on a session that grew for weeks. The chat started from one Claude session and resumed it across days and restarts, until every call re-read about 540k tokens and a turn with a few tool calls passed the 5-minute limit ("That took too long and I cut it off"). Now each day starts a fresh session (the day turns at 04:00), and so does a session whose context passes 150k tokens (SESSION_MAX_TOKENS in .env on a self-hosted install). The first turn of every new session carries the last seven days' digests and today's messages, and memory_search reaches everything older. The first message after updating starts fresh.

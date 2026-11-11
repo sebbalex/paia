@@ -1,8 +1,8 @@
 # Section 11, vendored
 
 Upstream: https://github.com/CrankAddict/section-11 (MIT, see `LICENSE.md`).
-Pinned at commit `2001e6a3b15a85c0ca06b2d47d6aaf826ee228b8` (2026-10-27),
-protocol version **11.100**. Copied unmodified; update with `scripts/update-section-11.sh [ref]`,
+Pinned at commit `7d975baeeb84de09f8cd4d394b967f7341ad2669` (2026-11-11),
+protocol version **11.113**. Copied unmodified; update with `scripts/update-section-11.sh [ref]`,
 which copies the files, bumps the line above and checks the cited headings.
 
 This is **reference**, not the method. The method is `../../SKILL.md`, which
