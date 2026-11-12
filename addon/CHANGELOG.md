@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.29
+
+- Run decoupling is now pace:HR, computed from the run's own streams. Intervals' decoupling is power:HR, and on a watch that estimates running power it measured a model. The new figure grade-adjusts speed with Minetti's energy-cost curve, trims the first 10 and last 5 minutes, drops stops and HR dropouts, and compares the first half with the second. It is read only on runs of 60+ minutes that were steady (pace varying ≤ 5 % minute to minute, ≤ 10 % as rough), not hilly (≤ 20 m climbing per km, ≤ 40 as rough), not at threshold (< 95 % of threshold pace), not stopped more than 10 % and not on trail. Heat over 25 °C is flagged. Treadmill runs count, without the hill check.
+- `coach_load` adds `durability_running`: the same 7 vs 28 day durability as for rides, from readable runs only. It costs one streams request per long run, cached.
+- `coach_sessions` no longer shows Intervals' power-based decoupling on runs; it points to `coach_activity`.
+
 ## 0.3.28
 
 - Next week's run workouts in the weekly report are drawn in pace, like Intervals draws them: target pace over time (faster higher), labelled in min/km, coloured by pace zone, with the threshold pace as a dotted line. Pace zones, % of threshold pace, ramps and min/km targets are read; a step by distance takes its time from its own target pace; an HR-only step is drawn grey. Before, a run workout showed its duration and no targets.

@@ -400,6 +400,92 @@ def test_session_analysis() -> None:
     check("no eftp on non-ride sport", "eftp" in th["sports"][1], False)
 
 
+def run_streams(minutes: int = 80, speed: float = 3.0, hr0: float = 140.0, drift: float = 0.0,
+                stops: int = 0, climb_every_m: float = 0.0, surge: float = 0.0,
+                warmup_hr: float | None = None) -> dict:
+    """Per-second run streams with known answers. `drift` is the HR rise over
+    the run as a fraction; `surge` alternates the speed by that fraction
+    every minute; `stops` inserts that many 60 s stops; `climb_every_m`
+    puts a 4 % hill of that length every 1 km."""
+    t, v, hr, dist, alt = [], [], [], [], []
+    d = a = 0.0
+    n = minutes * 60
+    stop_at = {int(n * (k + 1) / (stops + 1)) for k in range(stops)}
+    sec = 0
+    for i in range(n):
+        if i in stop_at:
+            for _ in range(60):
+                t.append(sec); v.append(0.0); hr.append(hr0); dist.append(d); alt.append(a)
+                sec += 1
+        sp = speed * (1 + (surge if (i // 60) % 2 else -surge))
+        grade = 0.04 if climb_every_m and (d % 1000) < climb_every_m else 0.0
+        d += sp
+        a += sp * grade
+        h = hr0 * (1 + drift * i / n)
+        if warmup_hr is not None and i < 600:
+            h = warmup_hr
+        t.append(sec); v.append(sp); hr.append(h); dist.append(d); alt.append(a)
+        sec += 1
+    return {"time": t, "velocity_smooth": v, "heartrate": hr, "distance": dist,
+            "fixed_altitude": alt}
+
+
+def test_run_decoupling() -> None:
+    print("run decoupling")
+    kw = dict(moving_secs=80 * 60, elevation_gain_m=20, distance_m=14400, threshold_ms=4.0)
+    flat = m.run_decoupling(run_streams(), **kw)
+    check("steady flat run: zero drift", (flat["readable"], flat["decoupling_pct"], flat["verdict"]),
+          ("yes", 0.0, "held"))
+    drifted = m.run_decoupling(run_streams(drift=0.15), **kw)
+    check("HR creeping at held pace drifts", (drifted["verdict"], drifted["decoupling_pct"] >= 5), ("drifted", True))
+    check("drift sign: positive is HR up", drifted["decoupling_pct"] > 0, True)
+    warm = m.run_decoupling(run_streams(warmup_hr=110), **kw)
+    check("warm-up trimmed", warm["decoupling_pct"], 0.0)
+    check("Minetti flat cost", m.minetti_cost(0.0), 3.6)
+    check("Minetti uphill costs more", m.minetti_cost(0.04) > 3.6 > m.minetti_cost(-0.04), True)
+    stopped = m.run_decoupling(run_streams(stops=10), **kw)
+    check("stops over 10% unreadable", stopped["readable"], "no")
+    few = m.run_decoupling(run_streams(stops=2), **kw)
+    check("a couple of stops is fine", (few["readable"], few["decoupling_pct"]), ("yes", 0.0))
+    surgy = m.run_decoupling(run_streams(surge=0.15), **kw)
+    check("surging pace unreadable", surgy["readable"], "no")
+    rolling = m.run_decoupling(run_streams(), **{**kw, "elevation_gain_m": 430})
+    check("30 m/km is rough", rolling["readable"], "rough")
+    hilly = m.run_decoupling(run_streams(), **{**kw, "elevation_gain_m": 720})
+    check("50 m/km is unreadable", hilly["readable"], "no")
+    hills = m.run_decoupling(run_streams(climb_every_m=200), **kw)
+    check("hills are grade-adjusted: GAP faster than raw on the climbs",
+          hills["mean_gap_pace"] < m.pace_str(3.0), True)
+    hard = m.run_decoupling(run_streams(speed=3.9), **kw)
+    check("threshold-pace run unreadable", hard["readable"], "no")
+    check("short run", m.run_decoupling(run_streams(50), **{**kw, "moving_secs": 3000})["readable"], "no")
+    check("trail run", m.run_decoupling(run_streams(), **kw, trail=True)["readable"], "no")
+    tm = m.run_decoupling(run_streams(), **{**kw, "elevation_gain_m": 900}, treadmill=True)
+    check("treadmill ignores climbing", tm["readable"], "yes")
+    hot = m.run_decoupling(run_streams(), **kw, temp_c=28)
+    check("heat flagged", any("hot" in f for f in hot["flags"]), True)
+    gappy = run_streams()
+    gappy["heartrate"] = [0] * 600 + gappy["heartrate"][600:]
+    check("HR dropouts ignored", m.run_decoupling(gappy, **kw)["decoupling_pct"], 0.0)
+    check("no streams", m.run_decoupling({}, **kw)["readable"], "absent")
+
+    a = icu_mod.activity(run(0, moving_time=4800, distance=14400, total_elevation_gain=20),
+                         icu_mod.streams_by_type([{"type": k, "data": v}
+                                                  for k, v in run_streams(drift=0.15).items()]))
+    check("activity reads run decoupling from streams",
+          (a["hr"]["decoupling_read"]["verdict"], a["hr"]["decoupling_pct"] >= 5), ("drifted", True))
+    reads = {f"r{i}": {"readable": "yes", "decoupling_pct": 6.0} for i in (1, 2, 3)}
+    reads.update({f"r{i}": {"readable": "yes", "decoupling_pct": 2.0} for i in (10, 15)})
+    reads["r20"] = {"readable": "rough", "decoupling_pct": 30.0}
+    runs = [run(i) for i in (1, 2, 3, 10, 15, 20)]
+    ld = icu_mod.load(wellness_rows(), runs, TODAY, reads)
+    dr = ld["durability_running"]
+    check("running durability counts readable runs only", (dr["qualifying_7d"], dr["qualifying_28d"]), (3, 5))
+    check("running durability warns in runs", any("3+ runs" in f for f in dr["flags"]), True)
+    check("ride durability untouched by runs", ld["durability"]["qualifying_28d"], 0)
+    check("no run reads, no running durability", icu_mod.load(wellness_rows(), runs, TODAY)["durability_running"], None)
+
+
 def test_client() -> None:
     print("client cache and backoff")
     cache = Path(tempfile.mkdtemp(prefix="icu-"))
@@ -706,7 +792,9 @@ def test_running() -> None:
     check("run zones on gap", a["zones"]["basis"], "gap")
     check("run zones on pace without gap setting",
           icu_mod.activity(run(0, use_gap_zone_times=False))["zones"]["basis"], "pace")
-    check("run decoupling rough without power", a["hr"]["decoupling_read"]["readable"], "rough")
+    check("long run without streams says so", a["hr"]["decoupling_read"]["readable"], "absent")
+    check("run carries Intervals' power figure only as an aside",
+          a["hr"]["decoupling_intervals_power_pct"], 4.0)
     check("run without RPE asks", any("RPE" in x for x in a["missing_inputs"]), True)
     nothr = icu_mod.activity(run(0, threshold_pace=None))
     check("run without threshold pace named",
@@ -736,9 +824,9 @@ def test_running() -> None:
     check("run with power also reads watts", a["main_set_power"]["reps"], 6)
     check("run with power zones on gap", a["zones"]["basis"], "gap")
     check("run power is a second view", a["run_power"]["avg_w"], 280)
-    check("run with power never reads VI",
+    check("run decoupling is pace-based, never power",
           icu_mod.activity(run(0, icu_average_watts=280, icu_variability_index=1.02))
-          ["hr"]["decoupling_read"]["readable"], "rough")
+          ["hr"]["decoupling_read"]["basis"].startswith("gap:hr"), True)
     steady_run = run(1, moving_time=7200, decoupling=2.0, icu_variability_index=1.02,
                      icu_average_watts=280)
     load = icu_mod.load(wellness_rows(), [steady_run, ride(1, decoupling=2.0)], TODAY)
@@ -788,7 +876,7 @@ def test_running() -> None:
 
 def main() -> int:
     for test in (test_hrv, test_rhr_sleep, test_load_metrics, test_decision, test_zones_tid,
-                 test_durability, test_shaping, test_session_analysis, test_running, test_client, test_tools, test_plan_workout, test_gate):
+                 test_durability, test_shaping, test_session_analysis, test_running, test_run_decoupling, test_client, test_tools, test_plan_workout, test_gate):
         test()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED:")

@@ -92,6 +92,7 @@ _RIDE_TYPES = frozenset({
     "Cyclocross", "EBikeRide", "EMountainBikeRide",
 })
 _RUN_TYPES = frozenset({"Run", "VirtualRun", "TrailRun"})
+_RUN_STREAMS = ("time", "velocity_smooth", "heartrate", "distance", "fixed_altitude")
 _GYM_TYPES = frozenset({"WeightTraining", "Workout", "Crossfit", "Yoga", "Pilates"})
 
 _ACTIVITY_ID = re.compile(r"\A[A-Za-z0-9_-]{1,40}\Z")
@@ -349,6 +350,14 @@ class Intervals:
             _TTL_CURVES,
         )
 
+    async def activity_streams(self, activity_id: str):
+        # Only what run decoupling needs; a recorded run does not change.
+        return await self.get(
+            f"/activity/{activity_id}/streams.json",
+            {"types": ",".join(_RUN_STREAMS)},
+            _TTL_ACTIVITY_OLD,
+        )
+
     async def pace_curves(self):
         # Grade-adjusted: a best 5 km on a hilly route is not a slow 5 km.
         return await self.get(
@@ -589,8 +598,11 @@ def _tid(acts: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def load(
-    rows: list[dict[str, Any]], acts: list[dict[str, Any]], today: date
+    rows: list[dict[str, Any]], acts: list[dict[str, Any]], today: date,
+    run_reads: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """`run_reads` is each long run's pace:HR decoupling read, by activity id,
+    for running durability. None leaves running durability out."""
     key = today.isoformat()
     latest = max(rows, key=lambda r: r.get("id", ""), default={})
     daily = {str(r["id"]): r.get("atlLoad") for r in rows if r.get("id")}
@@ -639,9 +651,30 @@ def load(
         # Rides only: it gates on the variability index, which needs measured
         # power. A run with watch-estimated power is not let in.
         "durability": m.durability([a for a in visible if _family(a) == "cycling"], today),
+        # Runs on their own: pace:HR from the streams, readable runs only.
+        "durability_running": _run_durability(visible, run_reads, today)
+        if run_reads is not None else None,
         "activities_28d": {"visible": len(visible), "hidden_strava": hidden},
         "missing_inputs": missing,
     }
+
+
+def _run_durability(
+    acts: list[dict[str, Any]], reads: dict[str, dict[str, Any]], today: date
+) -> dict[str, Any]:
+    rows = []
+    for a in acts:
+        read = reads.get(str(a.get("id"))) or {}
+        if read.get("readable") != "yes" or read.get("decoupling_pct") is None:
+            continue
+        try:
+            age = (today - date.fromisoformat(_day(a))).days
+        except ValueError:
+            continue
+        if 0 <= age < 28:
+            rows.append((age, float(read["decoupling_pct"])))
+    return {**m.durability_from(rows, unit="runs"),
+            "basis": "pace:HR on grade-adjusted speed, steady flat-enough aerobic runs of 60+ min"}
 
 
 def _r(value: Any, digits: int = 1) -> Any:
@@ -661,6 +694,33 @@ def _run_pace(a: dict[str, Any]) -> dict[str, Any]:
         "note": "gap is grade-adjusted pace: on hills read it, not avg. "
                 "pct_threshold is speed as % of threshold speed, so above 100 is faster",
     }
+
+
+def needs_streams(a: dict[str, Any]) -> bool:
+    """A run long enough for pace:HR decoupling to be computed from its streams."""
+    return (not is_stub(a) and a.get("type") in ("Run", "VirtualRun")
+            and (a.get("moving_time") or 0) >= m.RUN_DEC_MIN_SECS)
+
+
+def streams_by_type(payload: Any) -> dict[str, list[Any]]:
+    return {str(x.get("type")): x.get("data") or [] for x in payload or [] if isinstance(x, dict)}
+
+
+def run_decoupling(a: dict[str, Any], streams: dict[str, list[Any]] | None) -> dict[str, Any]:
+    """The run's pace:HR decoupling read, or why there is none."""
+    if streams is None and needs_streams(a):
+        return {"basis": "gap:hr", "readable": "absent",
+                "why": ["streams could not be read from Intervals.icu"]}
+    return m.run_decoupling(
+        streams or {},
+        moving_secs=a.get("moving_time"),
+        elevation_gain_m=a.get("total_elevation_gain"),
+        distance_m=a.get("distance"),
+        threshold_ms=a.get("threshold_pace"),
+        temp_c=a.get("average_weather_temp") or a.get("average_temp"),
+        trail=a.get("type") == "TrailRun",
+        treadmill=a.get("type") == "VirtualRun" or bool(a.get("trainer")),
+    )
 
 
 def _ride_blocks(a: dict[str, Any], ftp: Any) -> dict[str, Any]:
@@ -728,7 +788,24 @@ def _run_blocks(a: dict[str, Any], ftp: Any) -> dict[str, Any]:
     }
 
 
-def activity(a: dict[str, Any]) -> dict[str, Any]:
+def _run_hr(a: dict[str, Any], streams: dict[str, list[Any]] | None) -> dict[str, Any]:
+    """A run's decoupling is ours, on grade-adjusted pace. Intervals.icu's own
+    number is power:HR -- on a watch that estimates running power, a model --
+    and is carried only as a labelled aside."""
+    read = run_decoupling(a, streams)
+    return {
+        "decoupling_pct": read.get("decoupling_pct"),
+        "decoupling_read": read,
+        "decoupling_intervals_power_pct": _r(a.get("decoupling")),
+        "decoupling_note": "decoupling_pct is pace:HR from the streams; "
+                           "decoupling_intervals_power_pct is Intervals' power:HR "
+                           "figure, never the basis of a verdict on a run",
+    }
+
+
+def activity(a: dict[str, Any], streams: dict[str, list[Any]] | None = None) -> dict[str, Any]:
+    """One session. `streams` is the run's speed/HR/altitude streams, for
+    pace:HR decoupling; a run without them says so."""
     if is_stub(a):
         return {
             "id": a.get("id"),
@@ -783,10 +860,12 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         "hr": {
             "avg": a.get("average_heartrate"),
             "max": a.get("max_heartrate"),
-            "decoupling_pct": _r(a.get("decoupling")),
-            "decoupling_read": m.decoupling_read(
-                a.get("decoupling"), a.get("icu_variability_index"), moving, run=run
-            ),
+            **(_run_hr(a, streams) if run else {
+                "decoupling_pct": _r(a.get("decoupling")),
+                "decoupling_read": m.decoupling_read(
+                    a.get("decoupling"), a.get("icu_variability_index"), moving
+                ),
+            }),
             "hrrc_bpm": a.get("icu_hrr"),
             "zone_minutes": [round(x / 60, 1) for x in hr_secs] if hr_secs else None,
         },
@@ -850,10 +929,14 @@ def sessions(acts: list[dict[str, Any]]) -> dict[str, Any]:
             ),
             "run_speed_hr": m.run_efficiency(a.get("gap"), a.get("average_heartrate")) if run else None,
             "hr_avg": a.get("average_heartrate"),
-            "decoupling_pct": _r(a.get("decoupling")),
-            "decoupling_readable": m.decoupling_read(
-                a.get("decoupling"), a.get("icu_variability_index"), moving, run=run,
-            )["readable"],
+            # A run's decoupling needs its streams, one request each: it is
+            # read in coach_activity, not here.
+            "decoupling_pct": None if run else _r(a.get("decoupling")),
+            "decoupling_readable": (
+                "open coach_activity" if run
+                else m.decoupling_read(a.get("decoupling"), a.get("icu_variability_index"),
+                                       moving)["readable"]
+            ),
             "zones_basis": basis,
             "easy_grey_quality_pct": (
                 [split.get("easy_pct"), split.get("grey_pct"), split.get("quality_pct")]
@@ -1290,6 +1373,18 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
     weekly report for the transport. Without one the tool is absent.
     """
 
+    async def _streams(a: dict[str, Any]) -> dict[str, list[Any]] | None:
+        """A long run's streams for pace:HR decoupling; None when the run
+        does not need them or they cannot be read (the read says which)."""
+        if not needs_streams(a) or not _ACTIVITY_ID.match(str(a.get("id") or "")):
+            return None
+        try:
+            payload, _ = await icu.activity_streams(str(a["id"]))
+        except IntervalsError:
+            log.warning("streams unreadable for %s", a.get("id"))
+            return None
+        return streams_by_type(payload)
+
     @tool(
         "coach_readiness",
         "the owner's readiness for one day (default today): HRV as a 7-day "
@@ -1320,7 +1415,8 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         "rate, eFTP, 7-day load total, cycling-only and running-only, Foster "
         "monotony overall and per sport family (cycling, running, other), Seiler TID 7d vs 28d with polarization "
         "index and grey-zone %, aggregate durability (decoupling of long "
-        "steady rides, 7d vs 28d, with its reliability gate), and ACWR -- "
+        "steady rides, 7d vs 28d, with its reliability gate), the same for "
+        "runs on pace:HR (durability_running), and ACWR -- "
         "which is load context only, never a reason on its own to change a "
         "session. Read-only.",
         {"date": Annotated[str, "YYYY-MM-DD. Leave empty for today."]},
@@ -1336,6 +1432,10 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
             acts, m2 = await icu.activities(day - timedelta(days=27), day, today)
         except IntervalsError as exc:
             return _fail(str(exc))
+        run_reads = {}
+        for a in acts or []:
+            if needs_streams(a):
+                run_reads[str(a.get("id"))] = run_decoupling(a, await _streams(a))
         return _text(load(rows or [], acts or [], day), _merge_meta(m1, m2))
 
     @tool(
@@ -1343,7 +1443,8 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         "One activity in the detail a post-session analysis needs: duration, "
         "distance, for a run its pace, grade-adjusted pace and % of threshold, "
         "avg/NP power, intensity, VI, EF, L/R balance, HR and "
-        "decoupling with whether it can be read on this ride, Pw:HR in Z2, "
+        "decoupling with whether it can be read (on a run: pace:HR on "
+        "grade-adjusted speed, computed from the run's streams), Pw:HR in Z2, "
         "cadence, kJ and work above FTP, W' depletion, load, power and HR zone "
         "minutes (pace zones on a run without power) with Seiler TID, the main "
         "interval set rep by rep with power -- or on a run pace -- fade and HR creep, fuelling against the guideline, RPE and feel, and "
@@ -1361,7 +1462,8 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
             payload, meta = await icu.activity(raw, clock())
         except IntervalsError as exc:
             return _fail(str(exc))
-        return _text(activity(payload or {}), meta)
+        payload = payload or {}
+        return _text(activity(payload, await _streams(payload)), meta)
 
     @tool(
         "coach_sessions",

@@ -106,8 +106,17 @@ on a run are pace (or GAP) first, power only when no pace zones came through.
 - **Main set:** `pace_fade_pct` within ±2 % held; −2 to −3 % tired; beyond
   −3 % target too fast or started too hard (rep 1 against the rest).
   `pace_cv_pct` > 4 % is uneven pacing or terrain.
-- **Decoupling on runs** is always `rough`, power or not: a trend on flat,
-  even runs, nothing more. Runs are not part of `coach_load.durability`.
+- **Decoupling on runs** is pace:HR on grade-adjusted speed, computed from
+  the run's streams (`hr.decoupling_read`, basis `gap:hr`), not Intervals'
+  figure: that one is power:HR, and on a watch that estimates running power
+  it reads a model (`decoupling_intervals_power_pct`, an aside only). Same
+  rules as a ride: a verdict only on `readable: yes` (held < 5 %, drifted
+  ≥ 5 %), a trend hint on `rough`, and on `no` say why from `why` and do not
+  quote the number. Gates: 60+ min, first 10 and last 5 min trimmed, ≤ 10 %
+  stopped, 60 s pace CV ≤ 5 % (≤ 10 % rough), climbing ≤ 20 m/km (≤ 40
+  rough), below 95 % of threshold pace; trail never. A `hot` flag means heat
+  can explain the drift. Over weeks: `coach_load.durability_running`, runs
+  only, never mixed with rides.
 - **Speed per beat** (`aerobic.speed_hr`, grade-adjusted m/min per bpm): the
   run's aerobic efficiency. One run means little; the weekly
   `coach_history.run_speed_hr_easy_mean` (easy runs of 30+ min only) rising

@@ -171,6 +171,18 @@ transfers well; exact magnitudes do not. Say so when it matters.
 - Intervals at or near the speed of VO2max (≈ 3–5 min reps) are the most
   direct way to raise VO2max in runners. **Moderate** (review). Midgley,
   McNaughton & Jones 2007, Sports Med; Billat 2001, Sports Med.
+- The energy cost of running rises with uphill gradient and falls on gentle
+  downhills, along a measured curve from −45 % to +45 %. **Strong**
+  (laboratory, widely used for grade-adjusted pace). Minetti, Moia, Roi,
+  Susta & Ferretti 2002, J Appl Physiol. This is the curve the run
+  decoupling uses to grade-adjust speed.
+- In 82,303 recreational marathoners, the runners whose HR drifted least
+  against pace (km 35–40 vs 5–10) ran faster marathons, and drift began on
+  average around 25 km. **Moderate** (observational, very large sample).
+  Smyth, Maunder, Meyler, Hunter & Muniz-Pumares 2022, Sports Med.
+  Consequence: durability on a run is worth tracking. Its measure is not
+  the coach's decoupling, so its cut-offs are not borrowed; the 5 % line is
+  practice (Friel).
 - Critical speed (CS) marks the boundary between the heavy and severe
   intensity domains: below it a steady state is reached, above it the
   distance that can be covered (D′) is finite. It is estimated from maximal

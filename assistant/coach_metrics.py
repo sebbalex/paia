@@ -371,6 +371,12 @@ def durability(
             continue
         if 0 <= age < 28:
             rows.append((age, float(act["decoupling"])))
+    return durability_from(rows, unit="rides")
+
+
+def durability_from(rows: Sequence[tuple[int, float]], unit: str = "rides") -> dict[str, Any]:
+    """The aggregate from (age in days, decoupling %) of qualifying sessions:
+    7 vs 28 day means, trend and warnings. One sport per call."""
     d7 = [v for age, v in rows if age < 7]
     d28 = [v for _, v in rows]
     mean7 = round(statistics.fmean(d7), 2) if len(d7) >= 2 else None
@@ -388,7 +394,7 @@ def durability(
     ):
         flags.append("warning: durability declining")
     if sum(1 for v in d7 if v > 5) >= 3:
-        flags.append("warning: 3+ rides above 5% decoupling in 7d")
+        flags.append(f"warning: 3+ {unit} above 5% decoupling in 7d")
     return {
         "mean_decoupling_7d": mean7,
         "mean_decoupling_28d": mean28,
@@ -500,23 +506,14 @@ RUN_REP_FADE_PCT = 3.0
 
 def decoupling_read(
     decoupling: float | None, vi: float | None, moving_secs: float | None,
-    *, run: bool = False,
 ) -> dict[str, Any]:
-    """Whether a session's whole-session Pa:HR decoupling means anything.
-
-    The variability index gates a ride. It never gates a run: running power
-    is mostly estimated by the watch (a Forerunner models it from pace and
-    grade), so a VI read off it says nothing about how steady the run was.
-    """
+    """Whether a ride's whole-session Pw:HR decoupling means anything. A run
+    is read by run_decoupling, on pace, never here: running power is mostly
+    the watch's estimate, and its VI says nothing about how steady a run was."""
     if decoupling is None:
         return {"readable": "absent", "why": "no decoupling (no power or pace, or no HR)"}
     if (moving_secs or 0) < DECOUPLING_MIN_SECS:
         return {"readable": "no", "why": "under 60 min: too short to show drift"}
-    if run:
-        # Hills, stops and surges all move the number, and nothing here can
-        # say whether the run was steady.
-        return {"readable": "rough", "why": "run: steadiness unknown; trust it on "
-                "flat, even runs only, trend only"}
     if vi is None:
         return {"readable": "no", "why": "variability index unknown"}
     if vi <= DURABILITY_MAX_VI:
@@ -529,6 +526,202 @@ def decoupling_read(
         "why": f"VI {vi:.2f}: intervals or hills -- the number reflects the "
                "structure of the ride, not aerobic drift",
     }
+
+
+# -- run decoupling ------------------------------------------------------------
+# Pace:HR decoupling on a run, computed here from the run's streams because
+# Intervals.icu's own `decoupling` is power:HR (its posted code has no pace
+# branch), and on a watch that estimates running power that is a model of
+# the run, not the run. Every gate below was fixed before any athlete's data
+# was looked at; each says whether it is research or coaching practice.
+
+RUN_DEC_MIN_SECS = 3600            # practice: long enough for drift to show
+RUN_DEC_TRIM_START = 600           # practice (Friel): HR still settling
+RUN_DEC_TRIM_END = 300             # practice: cool-down jog
+RUN_DEC_STOP_MS = 1.4              # below a brisk walk: not running
+RUN_DEC_MAX_STOPPED = 0.10         # practice: >10% stopped breaks steadiness
+RUN_DEC_STEADY_CV = (5.0, 10.0)    # practice: 60 s GAP speed CV, yes / rough
+RUN_DEC_HILLS_M_PER_KM = (20.0, 40.0)  # practice: climbing per km, yes / rough
+RUN_DEC_MAX_PCT_THRESHOLD = 95.0   # practice: at or above, a threshold effort
+RUN_DEC_HEAT_C = 25.0
+RUN_DEC_GRADE_WINDOW_M = 50.0
+_HR_VALID = (40, 230)
+
+
+def minetti_cost(grade: float) -> float:
+    """Energy cost of running at a gradient, J/kg/m (Minetti et al. 2002,
+    J Appl Physiol), valid -45 % to +45 %; 3.6 on the flat."""
+    i = max(-0.45, min(0.45, grade))
+    return 155.4 * i**5 - 30.4 * i**4 - 43.3 * i**3 + 46.3 * i**2 + 19.5 * i + 3.6
+
+
+def _ffill(xs: Sequence[float | None]) -> list[float | None]:
+    out, last = [], None
+    for x in xs:
+        last = x if x is not None else last
+        out.append(last)
+    return out
+
+
+def _grades(dist: Sequence[float | None], alt: Sequence[float | None]) -> list[float]:
+    """Slope at each sample over a window of RUN_DEC_GRADE_WINDOW_M metres,
+    so GPS and barometer noise on a single second does not read as a wall."""
+    d, a = _ffill(dist), _ffill(alt)
+    n, half = len(d), RUN_DEC_GRADE_WINDOW_M / 2
+    out, lo, hi = [0.0] * n, 0, 0
+    for i in range(n):
+        if d[i] is None or a[i] is None:
+            continue
+        while lo < i and (d[lo] is None or d[lo] < d[i] - half):
+            lo += 1
+        hi = max(hi, i)
+        while hi + 1 < n and d[hi + 1] is not None and d[hi + 1] <= d[i] + half:
+            hi += 1
+        if d[hi] is not None and d[lo] is not None and a[hi] is not None and a[lo] is not None \
+                and d[hi] - d[lo] >= half:
+            out[i] = (a[hi] - a[lo]) / (d[hi] - d[lo])
+    return out
+
+
+def run_decoupling(
+    streams: dict[str, Sequence[Any]],
+    *,
+    moving_secs: float | None,
+    elevation_gain_m: float | None,
+    distance_m: float | None,
+    threshold_ms: float | None,
+    temp_c: float | None = None,
+    trail: bool = False,
+    treadmill: bool = False,
+) -> dict[str, Any]:
+    """Pace:HR decoupling of a run on grade-adjusted speed, first half against
+    second after trimming warm-up and cool-down, with whether it can be read.
+
+    decoupling = (EF1 - EF2) * 100 / EF1, EF = mean GAP speed / mean HR: the
+    sign Intervals.icu uses, positive meaning HR drifted up at held pace.
+    Readable is the worst of the gates: `yes` gives a verdict (held < 5 %,
+    drifted >= 5 %, Friel's cut-off, coaching practice), `rough` is a trend
+    hint, `no` says why and should not be quoted as a number.
+    """
+    def out(readable: str, why: list[str], **extra: Any) -> dict[str, Any]:
+        return {"basis": "gap:hr (pace-based, computed from streams)",
+                "readable": readable, "why": why, **extra}
+
+    if trail:
+        return out("no", ["trail run: grade-adjusted pace is not reliable off road"])
+    if (moving_secs or 0) < RUN_DEC_MIN_SECS:
+        return out("no", ["under 60 min moving: too short to show drift"])
+    t = list(streams.get("time") or [])
+    v = list(streams.get("velocity_smooth") or [])
+    hr = list(streams.get("heartrate") or [])
+    n = min(len(t), len(v), len(hr))
+    if n < 600:
+        return out("absent", ["no speed and HR streams for this run"])
+    alt = streams.get("fixed_altitude") or streams.get("altitude")
+    dist = streams.get("distance")
+    grades = [0.0] * n if treadmill or not alt or not dist else _grades(dist[:n], alt[:n])
+    flat = minetti_cost(0.0)
+
+    # Weight each sample by the time to the next, capped, so a recording gap
+    # does not count as minutes of running.
+    dt = [max(0.0, min(5.0, float((t[i + 1] or 0) - (t[i] or 0)))) if i + 1 < n else 1.0
+          for i in range(n)]
+    moving = [(v[i] or 0) >= RUN_DEC_STOP_MS for i in range(n)]
+    moving_total = sum(d for d, mv in zip(dt, moving) if mv)
+    first = next((i for i in range(n) if moving[i]), 0)
+    last = max((i for i in range(n) if moving[i]), default=n - 1)
+    stopped = sum(dt[i] for i in range(first, last + 1) if not moving[i])
+    why: list[str] = []
+    levels = ["yes"]
+    if moving_total and stopped / moving_total > RUN_DEC_MAX_STOPPED:
+        return out("no", [f"stopped {round(100 * stopped / moving_total)}% of moving time: "
+                          "not a steady run"])
+
+    # Trim by moving time from each end.
+    run_t, keep = 0.0, []
+    for i in range(n):
+        if not moving[i]:
+            continue
+        if RUN_DEC_TRIM_START <= run_t <= moving_total - RUN_DEC_TRIM_END:
+            h = hr[i]
+            if h is not None and _HR_VALID[0] <= h <= _HR_VALID[1]:
+                keep.append(i)
+        run_t += dt[i]
+    kept_secs = sum(dt[i] for i in keep)
+    if kept_secs < 30 * 60:
+        return out("no", ["under 30 min of usable running after trimming warm-up, "
+                          "cool-down, stops and HR dropouts"])
+    gap = {i: (v[i] or 0) * minetti_cost(grades[i]) / flat for i in keep}
+
+    # Steadiness: CV of 60 s blocks of GAP speed.
+    blocks, acc, acc_t = [], 0.0, 0.0
+    for i in keep:
+        acc += gap[i] * dt[i]
+        acc_t += dt[i]
+        if acc_t >= 60:
+            blocks.append(acc / acc_t)
+            acc, acc_t = 0.0, 0.0
+    cv = statistics.pstdev(blocks) / statistics.fmean(blocks) * 100 if len(blocks) > 1 else 0.0
+    if cv > RUN_DEC_STEADY_CV[1]:
+        levels.append("no")
+        why.append(f"uneven pace (60 s GAP CV {cv:.1f}%): intervals, surges or terrain")
+    elif cv > RUN_DEC_STEADY_CV[0]:
+        levels.append("rough")
+        why.append(f"pace not fully steady (60 s GAP CV {cv:.1f}%)")
+
+    climb = None
+    if not treadmill and elevation_gain_m is not None and distance_m:
+        climb = elevation_gain_m / (distance_m / 1000)
+        if climb > RUN_DEC_HILLS_M_PER_KM[1]:
+            levels.append("no")
+            why.append(f"hilly ({climb:.0f} m/km): HR on climbs and descents does not follow GAP")
+        elif climb > RUN_DEC_HILLS_M_PER_KM[0]:
+            levels.append("rough")
+            why.append(f"rolling ({climb:.0f} m/km)")
+
+    mean_gap = sum(gap[i] * dt[i] for i in keep) / kept_secs
+    pct_thr = mean_gap / threshold_ms * 100 if threshold_ms else None
+    if pct_thr is not None and pct_thr >= RUN_DEC_MAX_PCT_THRESHOLD:
+        levels.append("no")
+        why.append(f"run at {pct_thr:.0f}% of threshold pace: drift is expected at that "
+                   "intensity, it is not an aerobic-fitness signal")
+    if threshold_ms is None:
+        why.append("no threshold pace: intensity not checked")
+
+    half_t, acc_t, split = kept_secs / 2, 0.0, len(keep)
+    for k, i in enumerate(keep):
+        acc_t += dt[i]
+        if acc_t >= half_t:
+            split = k + 1
+            break
+
+    def ef(idx: list[int]) -> float | None:
+        secs = sum(dt[i] for i in idx)
+        h = sum(hr[i] * dt[i] for i in idx) / secs if secs else 0
+        return (sum(gap[i] * dt[i] for i in idx) / secs) / h if secs and h else None
+
+    ef1, ef2 = ef(keep[:split]), ef(keep[split:])
+    if not ef1 or not ef2:
+        return out("absent", ["could not split the run into two halves with HR"])
+    dec = round((ef1 - ef2) * 100 / ef1, 1)
+    readable = "no" if "no" in levels else "rough" if "rough" in levels else "yes"
+    extra: dict[str, Any] = {}
+    if readable == "yes":
+        extra["verdict"] = "held" if dec < DECOUPLING_GOOD_PCT else "drifted"
+    flags = []
+    if temp_c is not None and temp_c > RUN_DEC_HEAT_C:
+        flags.append(f"hot ({temp_c:.0f} C): heat alone raises HR drift")
+    return out(
+        readable, why or [("steady, flat enough, aerobic" if not treadmill else
+                           "steady treadmill run (no grade)")],
+        decoupling_pct=dec, **extra,
+        analysed_min=round(kept_secs / 60),
+        gap_cv_pct=round(cv, 1),
+        climb_m_per_km=round(climb, 1) if climb is not None else None,
+        mean_gap_pace=pace_str(mean_gap),
+        pct_threshold=round(pct_thr) if pct_thr is not None else None,
+        flags=flags,
+    )
 
 
 def fuel(moving_secs: float | None, used_g: float | None, ingested_g: float | None) -> dict[str, Any] | None:

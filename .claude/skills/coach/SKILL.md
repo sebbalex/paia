@@ -120,7 +120,7 @@ Nine reads and one write, all over Intervals.icu:
 | Tool | For |
 |---|---|
 | `coach_readiness` | today: HRV band, RHR, sleep, ImReady4, baseline Go/Modify/Skip |
-| `coach_load` | CTL/ATL/TSB, ramp, eFTP, load 7d per sport, monotony per sport, TID 7d/28d, durability (rides), ACWR |
+| `coach_load` | CTL/ATL/TSB, ramp, eFTP, load 7d per sport, monotony per sport, TID 7d/28d, durability (rides) and `durability_running` (runs, pace:HR), ACWR |
 | `coach_sessions` | last 7–56 days, one row per session: the patterns, and ids. Ride columns (NP, IF, VI, EF, Pw:HR Z2) on rides, run columns (GAP, % threshold pace, speed per beat) on runs |
 | `coach_activity` | one session in depth, read on its own sport's terms. Ride: power, main set in watts, Pw:HR Z2, W′, rolling FTP. Run: pace / GAP / % threshold, main set in pace, speed per beat; watch power only as a second view (`run_power`, `main_set_power`). Both: HR, decoupling readability, zones, fuel |
 | `coach_week` | planned vs done for an ISO week |
