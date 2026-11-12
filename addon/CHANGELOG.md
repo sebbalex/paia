@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.30
+
+- Run decoupling judges steadiness on raw speed, not grade-adjusted speed. Grade adjustment moves speed about 5 % per 1 % of slope, so an evenly paced run on gentle rollers read as unsteady and its decoupling came back only as rough. Hills stay with the climbing check and the drift figure stays grade-adjusted; the cut-offs are unchanged.
+
 ## 0.3.29
 
 - Run decoupling is now pace:HR, computed from the run's own streams. Intervals' decoupling is power:HR, and on a watch that estimates running power it measured a model. The new figure grade-adjusts speed with Minetti's energy-cost curve, trims the first 10 and last 5 minutes, drops stops and HR dropouts, and compares the first half with the second. It is read only on runs of 60+ minutes that were steady (pace varying ≤ 5 % minute to minute, ≤ 10 % as rough), not hilly (≤ 20 m climbing per km, ≤ 40 as rough), not at threshold (< 95 % of threshold pace), not stopped more than 10 % and not on trail. Heat over 25 °C is flagged. Treadmill runs count, without the hill check.

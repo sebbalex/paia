@@ -456,6 +456,7 @@ def test_run_decoupling() -> None:
     hills = m.run_decoupling(run_streams(climb_every_m=200), **kw)
     check("hills are grade-adjusted: GAP faster than raw on the climbs",
           hills["mean_gap_pace"] < m.pace_str(3.0), True)
+    check("evenly paced rolling run stays readable", hills["readable"], "yes")
     hard = m.run_decoupling(run_streams(speed=3.9), **kw)
     check("threshold-pace run unreadable", hard["readable"], "no")
     check("short run", m.run_decoupling(run_streams(50), **{**kw, "moving_secs": 3000})["readable"], "no")

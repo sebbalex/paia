@@ -540,7 +540,7 @@ RUN_DEC_TRIM_START = 600           # practice (Friel): HR still settling
 RUN_DEC_TRIM_END = 300             # practice: cool-down jog
 RUN_DEC_STOP_MS = 1.4              # below a brisk walk: not running
 RUN_DEC_MAX_STOPPED = 0.10         # practice: >10% stopped breaks steadiness
-RUN_DEC_STEADY_CV = (5.0, 10.0)    # practice: 60 s GAP speed CV, yes / rough
+RUN_DEC_STEADY_CV = (5.0, 10.0)    # practice: 60 s speed CV, yes / rough
 RUN_DEC_HILLS_M_PER_KM = (20.0, 40.0)  # practice: climbing per km, yes / rough
 RUN_DEC_MAX_PCT_THRESHOLD = 95.0   # practice: at or above, a threshold effort
 RUN_DEC_HEAT_C = 25.0
@@ -653,10 +653,12 @@ def run_decoupling(
                           "cool-down, stops and HR dropouts"])
     gap = {i: (v[i] or 0) * minetti_cost(grades[i]) / flat for i in keep}
 
-    # Steadiness: CV of 60 s blocks of GAP speed.
+    # Steadiness on raw speed: did the runner pace evenly? Hills are the
+    # climbing gate's job, and grade-adjusting first would make a steadily
+    # paced rolling run look uneven (1 % of slope moves GAP about 5 %).
     blocks, acc, acc_t = [], 0.0, 0.0
     for i in keep:
-        acc += gap[i] * dt[i]
+        acc += (v[i] or 0) * dt[i]
         acc_t += dt[i]
         if acc_t >= 60:
             blocks.append(acc / acc_t)
@@ -664,10 +666,10 @@ def run_decoupling(
     cv = statistics.pstdev(blocks) / statistics.fmean(blocks) * 100 if len(blocks) > 1 else 0.0
     if cv > RUN_DEC_STEADY_CV[1]:
         levels.append("no")
-        why.append(f"uneven pace (60 s GAP CV {cv:.1f}%): intervals, surges or terrain")
+        why.append(f"uneven pace (60 s speed CV {cv:.1f}%): intervals, surges or stops")
     elif cv > RUN_DEC_STEADY_CV[0]:
         levels.append("rough")
-        why.append(f"pace not fully steady (60 s GAP CV {cv:.1f}%)")
+        why.append(f"pace not fully steady (60 s speed CV {cv:.1f}%)")
 
     climb = None
     if not treadmill and elevation_gain_m is not None and distance_m:
@@ -716,7 +718,7 @@ def run_decoupling(
                            "steady treadmill run (no grade)")],
         decoupling_pct=dec, **extra,
         analysed_min=round(kept_secs / 60),
-        gap_cv_pct=round(cv, 1),
+        speed_cv_pct=round(cv, 1),
         climb_m_per_km=round(climb, 1) if climb is not None else None,
         mean_gap_pace=pace_str(mean_gap),
         pct_threshold=round(pct_thr) if pct_thr is not None else None,

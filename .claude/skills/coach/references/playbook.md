@@ -113,7 +113,8 @@ on a run are pace (or GAP) first, power only when no pace zones came through.
   rules as a ride: a verdict only on `readable: yes` (held < 5 %, drifted
   ≥ 5 %), a trend hint on `rough`, and on `no` say why from `why` and do not
   quote the number. Gates: 60+ min, first 10 and last 5 min trimmed, ≤ 10 %
-  stopped, 60 s pace CV ≤ 5 % (≤ 10 % rough), climbing ≤ 20 m/km (≤ 40
+  stopped, 60 s raw speed CV ≤ 5 % (≤ 10 % rough; raw, not GAP, so a
+  steadily paced rolling run is not read as uneven), climbing ≤ 20 m/km (≤ 40
   rough), below 95 % of threshold pace; trail never. A `hot` flag means heat
   can explain the drift. Over weeks: `coach_load.durability_running`, runs
   only, never mixed with rides.
