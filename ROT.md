@@ -372,9 +372,9 @@ Facts, newest first. Link others with [[their-name]].
   falls back to search the way it worked before. That is a weaker answer, not a
   broken one -- say which you gave.
 
-- **Intervals.icu: eight reads and one write, for the endurance coach (cycling, running).** `coach_readiness`,
+- **Intervals.icu: nine reads and one write, for the endurance coach (cycling, running).** `coach_readiness`,
   `coach_load`, `coach_sessions`, `coach_activity`, `coach_week`,
-  `coach_history`, `coach_power_curve`, `coach_thresholds`. They return finished numbers -- use them as given, never
+  `coach_history`, `coach_power_curve`, `coach_pace_curve`, `coach_thresholds`. They return finished numbers -- use them as given, never
   redo the arithmetic, and carry their `missing_inputs` into the answer.
   `coach_plan_workout` puts one planned workout on the Intervals.icu
   calendar, from where Intervals pushes it to Garmin Connect and the head unit.

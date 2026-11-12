@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.27
+
+- New read for runners, `coach_pace_curve`: best grade-adjusted times at 400 m, 1 km, mile, 5 km, 10 km, half and marathon over 42 days, 84 days and the year, with the recent speed as % of the year's best. It also returns Intervals' critical-speed fit (CS pace, D′, the efforts it rests on) and says whether it can be trusted: three or more efforts of 2–15 minutes, spread in duration, and a tight fit. A trusted CS is compared to the threshold pace in the run settings, so a stale threshold shows up.
+- The weekly report's fifth chart follows the main sport of the last six weeks: the power profile for a cyclist, the new pace profile ("Curva di passo") for a runner.
+
 ## 0.3.26
 
 - The coach reads each sport on its own terms. A run no longer carries the ride analysis (power block, W′, kJ above FTP, rolling FTP): it gets pace, GAP, % of threshold pace, a pace-based main set and its own aerobic signal, speed per beat (grade-adjusted m/min per bpm). Watch-estimated running power is still there, as a second view only. A ride is unchanged.

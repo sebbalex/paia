@@ -66,8 +66,16 @@ def main() -> int:
           [c.title for c in made] == cc.TITLES["coach-week"], str([c.title for c in made]))
     check("filenames are plain ascii", all(c.filename.isascii() for c in made),
           str([c.filename for c in made]))
+    pace = cc.pace_profile({"profile": [
+        {"distance": "1k", "42d_time": "3:58", "42d_pct_of_1y": 97},
+        {"distance": "5k", "42d_time": "21:40", "42d_pct_of_1y": 94}],
+        "critical_speed": {"42d": {"cs_pace": "4:16/km", "trustworthy": False}}})
+    check("pace profile draws", pace.png.startswith(PNG) and pace.title == cc.PACE_TITLE, pace.title)
+    run_acts = [{"type": "Run", "start_date_local": f"{today.isoformat()}T07:00:00", "moving_time": 3600}]
+    check("main sport: running when it has the hours", cc.main_sport(run_acts + acts, today), "running")
+    check("main sport: bike on no data", cc.main_sport([], today), "cycling")
     empty = [cc.fitness([], today), cc.intensity({}), cc.recovery([], today, None),
-             cc.power_profile({}), cc.trend({})]
+             cc.power_profile({}), cc.pace_profile({}), cc.trend({})]
     check("no data still draws a placeholder", all(c.png.startswith(PNG) for c in empty), "")
 
     print("\nworkout profiles")
@@ -114,6 +122,7 @@ def main() -> int:
         async def sport_settings(self):
             return [{"types": ["Ride"], "ftp": 273, "power_zones": [55, 78, 95, 105, 125, 150, 999]}], {}
         async def power_curves(self): return {}, {}
+        async def pace_curves(self): return {}, {}
         async def events(self, oldest, newest, today):
             self.asked.append((oldest, newest))
             return cal, {}
@@ -126,6 +135,12 @@ def main() -> int:
     check("events read for the week after",
           fake.asked == [(today + timedelta(days=1), today + timedelta(days=7))], str(fake.asked))
 
+    runner = FakeIcu()
+    async def run_acts_(*a): return acts + [{"type": "Run", "moving_time": 36000,
+        "start_date_local": f"{today.isoformat()}T07:00:00"}], {}
+    runner.activities = run_acts_
+    titles = [c.title for c in _aio.run(cc.render("coach-week", runner, today))[:6]]
+    check("runner's report: pace profile in fifth place", titles[4], cc.PACE_TITLE)
     async def broken(*a): raise icu_mod.IntervalsError("down")
     fake.events = broken
     full = _aio.run(cc.render("coach-week", fake, today))

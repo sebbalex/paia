@@ -191,7 +191,7 @@ _SECTION_11 = ".claude/skills/coach/references/section-11"
 _COACH_TOOL = re.compile(
     r"\Amcp__coach__("
     r"coach_readiness|coach_load|coach_activity|coach_sessions"
-    r"|coach_week|coach_history|coach_power_curve|coach_thresholds"
+    r"|coach_week|coach_history|coach_power_curve|coach_pace_curve|coach_thresholds"
     r"|coach_plan_workout|coach_report"
     r")\Z"
 )

@@ -356,6 +356,39 @@ def test_session_analysis() -> None:
          "weight": 77.2, "start_date_local": "2026-09-08T00:00:00", "end_date_local": "2026-10-20"},
     ]})
     check("power curve names missing windows", len(pc["missing_inputs"]), 2)
+    # Shape as Intervals.icu returns it (observed 2026-11-12): metres against
+    # best seconds, a CS model whose input points index into those lists.
+    dist = [400.0, 1000.0, 1609.34, 2000.0, 3000.0, 5000.0]
+    pcv = icu_mod.pace_curve({"list": [
+        {"id": "42d", "type": "GAP", "distance": dist, "values": [90, 240, 400, 500, 780, 1350],
+         "start_date_local": "2026-10-02T00:00:00", "end_date_local": "2026-11-13T00:00:00",
+         "paceModels": [{"type": "CS", "criticalSpeed": 3.9, "dPrime": 180.0, "r2": 0.99,
+                         "inputPointIndexes": [1, 3, 4]}]},
+        {"id": "1y", "type": "GAP", "distance": dist, "values": [85, 228, 380, 480, 750, 1300],
+         "paceModels": [{"type": "CS", "criticalSpeed": 2.17, "dPrime": 28.0, "r2": 1.0,
+                         "inputPointIndexes": [1, 3]}]},
+    ]}, 4.0)
+    check("pace curve basis", pcv["basis"], "gap")
+    k5 = next(p for p in pcv["profile"] if p["distance"] == "5k")
+    check("pace curve 5k time and pace", (k5["42d_time"], k5["42d_pace"]), ("22:30", "4:30/km"))
+    check("pace curve recent as % of season", k5["42d_pct_of_1y"], 96)
+    check("pace curve skips distances never run", [p["distance"] for p in pcv["profile"]],
+          ["400m", "1k", "mile", "5k"])
+    cs = pcv["critical_speed"]["42d"]
+    check("cs pace", cs["cs_pace"], "4:16/km")
+    check("cs trusted on three 2-15 min efforts", (cs["trustworthy"], cs["why_not"]), (True, []))
+    check("cs vs threshold", cs["vs_threshold_pace_pct"], 97.5)
+    two = pcv["critical_speed"]["1y"]
+    check("2-point cs not trusted", two["trustworthy"], False)
+    check("2-point cs says why", any("r2 1.0" in w for w in two["why_not"]), True)
+    bunched = icu_mod.pace_curve({"list": [{"id": "42d", "type": "GAP", "distance": dist,
+        "values": [90, 240, 400, 500, 780, 1350], "paceModels": [{"type": "CS",
+        "criticalSpeed": 3.9, "dPrime": 180.0, "r2": 0.99, "inputPointIndexes": [2, 3, 4]}]}]}, 4.0)
+    check("cs on bunched efforts not trusted",
+          any("close in duration" in w for w in bunched["critical_speed"]["42d"]["why_not"]), True)
+    check("pace curve names missing window", pcv["missing_inputs"], ["no 84d curve returned"])
+    check("pace curve without threshold pace says so",
+          any("threshold pace" in x for x in icu_mod.pace_curve({"list": []})["missing_inputs"]), True)
     th = icu_mod.thresholds([{"types": ["Ride"], "ftp": 273,
                               "power_zones": [55, 75, 90, 105, 120, 150, 999],
                               "sweet_spot_min": 84, "sweet_spot_max": 97}])
@@ -423,9 +456,9 @@ def test_tools() -> None:
     cache = Path(tempfile.mkdtemp(prefix="icu-"))
     fake = FakeIntervals(cache, [wellness_rows()])
     tools = {t.name: t for t in build_tools(fake, clock=lambda: TODAY)}
-    check("eight reads and one write", sorted(tools), sorted([
+    check("nine reads and one write", sorted(tools), sorted([
         "coach_readiness", "coach_load", "coach_activity", "coach_sessions",
-        "coach_week", "coach_history", "coach_power_curve", "coach_thresholds",
+        "coach_week", "coach_history", "coach_power_curve", "coach_pace_curve", "coach_thresholds",
         "coach_plan_workout",
     ]))
     out = asyncio.run(tools["coach_readiness"].handler({}))
@@ -589,7 +622,8 @@ def test_gate() -> None:
     policy.check("Read", {"file_path": ".claude/skills/coach/references/section-11/SECTION_11.md",
                           "offset": 1, "limit": 40})
     for name in ("coach_readiness", "coach_load", "coach_activity", "coach_sessions",
-                 "coach_week", "coach_history", "coach_power_curve", "coach_thresholds"):
+                 "coach_week", "coach_history", "coach_power_curve", "coach_pace_curve",
+                 "coach_thresholds"):
         check(f"{name} allowed", policy.check(f"mcp__coach__{name}", {}).allow, True)
     policy.begin_turn()
     check("next turn closes the gate again",

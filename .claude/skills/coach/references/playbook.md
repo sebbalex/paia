@@ -151,11 +151,22 @@ Look for these every weekly review and whenever the owner asks "how am I doing":
 6. **Pw:HR Z2 rising** over weeks: aerobic base improving, even if eFTP is
    flat.
 7. **Load spikes after trips.** A week of hiking followed by hard rides.
-8. **Run volume jumping.** `coach_history.run_km_visible` or
+8. **Run: missing speed or missing endurance.** `coach_pace_curve` 400 m
+   and 1 km at < 90 % of the year's best while 5–10 km holds: no fast running
+   lately. The reverse: no long steady running. Same caveat as the bike: a
+   gap in the training until they have tried.
+   **Critical speed** (`critical_speed.42d`) is the run threshold measured
+   from their own best efforts (`evidence.md` "Running"). Use it only when
+   `trustworthy` is true; otherwise say why from `why_not`. When it is
+   trusted and `vs_threshold_pace_pct` is off by more than ~3 %, the threshold
+   pace in Intervals is stale: say so and propose updating it, do not
+   rescale paces in your head. CS sits close to the top of the heavy domain,
+   so it is usually a little faster than a 60-minute race pace.
+9. **Run volume jumping.** `coach_history.run_km_visible` or
    `run_hours_visible` up > 30 % over two weeks, or > 10 % a week for
    three: the injury pattern in `evidence.md` "Running". Say it before the
    niggle does.
-9. **Hard days in two sports.** A bike VO2 and a run threshold in the same
+10. **Hard days in two sports.** A bike VO2 and a run threshold in the same
     48 h: two hard sessions, not one each. Check `coach_load.monotony_by_sport_7d`
     and the week's sessions across sports, not per sport.
 10. **Nothing logged.** No RPE or feel on any ride: the analysis is power-only.

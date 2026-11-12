@@ -720,6 +720,101 @@ def power_profile(
     return out
 
 
+# -- pace profile (runs) -------------------------------------------------------
+
+# Standard race distances, in metres, as Intervals.icu lists them on its pace
+# curve. A distance longer than the longest run in a window is simply absent.
+PACE_DISTANCES = {400.0: "400m", 1000.0: "1k", 1609.34: "mile", 5000.0: "5k",
+                  10000.0: "10k", 21097.5: "half", 42195.0: "marathon"}
+
+# Critical speed is fitted from maximal efforts of about 2 to 15 minutes
+# (Jones et al. 2010). Fewer than three such efforts, or a loose fit, and the
+# number is shown with the reason it is not to be trusted.
+CS_MIN_POINTS = 3
+CS_MIN_SECS, CS_MAX_SECS = 120, 900
+CS_MIN_R2 = 0.95
+# Efforts bunched at one duration pin the line poorly: the longest at least
+# twice the shortest.
+CS_MIN_SPREAD = 2.0
+
+
+def pick_pace_curve(distances: Sequence[float], secs: Sequence[float | None]) -> dict[float, float | None]:
+    """Best time in seconds at each standard distance. Intervals.icu gives a
+    pace curve as distances in metres against the fastest time over each."""
+    at = {round(float(d), 1): t for d, t in zip(distances, secs)}
+    return {d: at.get(round(d, 1)) for d in PACE_DISTANCES}
+
+
+def time_str(secs: float | None) -> str | None:
+    if not secs:
+        return None
+    s = round(secs)
+    h, m_, sec = s // 3600, (s % 3600) // 60, s % 60
+    return f"{h}:{m_:02d}:{sec:02d}" if h else f"{m_}:{sec:02d}"
+
+
+def pace_profile(
+    curves: dict[str, dict[float, float | None]], recent: str, reference: str
+) -> list[dict[str, Any]]:
+    """Best time and pace per distance in each window, and recent speed as %
+    of the reference window's: below 100 is slower than the season's best."""
+    out = []
+    for d, label in PACE_DISTANCES.items():
+        times = {name: c.get(d) for name, c in curves.items()}
+        if not any(times.values()):
+            continue
+        now, ref = times.get(recent), times.get(reference)
+        out.append({
+            "distance": label,
+            **{f"{name}_time": time_str(t) for name, t in times.items()},
+            **{f"{name}_pace": pace_str(d / t) if t else None for name, t in times.items()},
+            f"{recent}_pct_of_{reference}": round(ref / now * 100) if now and ref else None,
+        })
+    return out
+
+
+def critical_speed(
+    model: dict[str, Any] | None,
+    distances: Sequence[float],
+    secs: Sequence[float | None],
+    threshold_ms: float | None,
+) -> dict[str, Any] | None:
+    """Intervals.icu's critical-speed fit of a pace curve, with whether it can
+    be trusted. CS is the fastest pace held in a metabolic steady state, the
+    running counterpart of critical power; D' is the distance that can be
+    run faster than it before exhaustion."""
+    if not model or not model.get("criticalSpeed"):
+        return None
+    cs = float(model["criticalSpeed"])
+    idx = [i for i in model.get("inputPointIndexes") or [] if 0 <= i < len(secs)]
+    efforts = [{"distance_m": round(distances[i]), "time": time_str(secs[i])} for i in idx]
+    durations = [secs[i] for i in idx if secs[i]]
+    r2 = model.get("r2")
+    why = []
+    if len(idx) < CS_MIN_POINTS:
+        why.append(f"fitted from {len(idx)} efforts; needs {CS_MIN_POINTS}+"
+                   + (" (a 2-point fit always has r2 1.0, which says nothing)" if len(idx) == 2 else ""))
+    if len(durations) >= 2 and max(durations) < CS_MIN_SPREAD * min(durations):
+        why.append("efforts too close in duration: the longest should be at least "
+                   f"{CS_MIN_SPREAD:g}x the shortest")
+    if any(d < CS_MIN_SECS or d > CS_MAX_SECS for d in durations):
+        why.append("an effort outside 2-15 minutes is in the fit")
+    if r2 is not None and r2 < CS_MIN_R2:
+        why.append(f"loose fit (r2 {r2:.2f})")
+    return {
+        "cs_pace": pace_str(cs),
+        "d_prime_m": round(model["dPrime"]) if model.get("dPrime") is not None else None,
+        "r2": round(r2, 3) if r2 is not None else None,
+        "efforts_used": efforts,
+        "trustworthy": not why,
+        "why_not": why,
+        "vs_threshold_pace_pct": round(cs / threshold_ms * 100, 1) if threshold_ms else None,
+        "note": "best efforts from training, not tests: if none was maximal, CS "
+                "reads slow. vs_threshold_pace_pct above 100 means CS is faster "
+                "than the threshold pace in the run settings",
+    }
+
+
 def zone_watts(ftp: float | None, upper_pcts: Sequence[float] | None) -> list[dict[str, Any]] | None:
     """Intervals.icu stores power zones as upper bounds in % of FTP."""
     if not ftp or not upper_pcts:

@@ -54,7 +54,7 @@ transport (`assistant/google_login.py`) with the owner's phone as the browser,
 and every `gws` call reads the token it leaves in `state/google/`.
 Drive reads are confined to the
 folder ids in `DRIVE_ALLOWED_FOLDERS` and everything beneath them. Intervals.icu reads through
-`assistant/intervals.py` (eight `coach_*` reads, metrics in
+`assistant/intervals.py` (nine `coach_*` reads, metrics in
 `assistant/coach_metrics.py`) for the endurance coach (cycling, running), plus one write,
 `coach_plan_workout`, which puts a planned workout on the Intervals calendar
 (and so on Garmin Connect and the head unit) only after a preview in an earlier

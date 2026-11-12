@@ -247,6 +247,50 @@ def power_profile(curve: dict[str, Any]) -> Chart:
     return Chart(title, _png(fig))
 
 
+def pace_profile(curve: dict[str, Any]) -> Chart:
+    """The runner's counterpart of the power profile: best grade-adjusted
+    time per distance over the last six weeks, as % of the year's best speed."""
+    title = PACE_TITLE
+    prof = [p for p in curve.get("profile") or [] if p.get("42d_pct_of_1y") is not None]
+    if not prof:
+        return _empty(title, "Nessuna curva di passo disponibile.")
+    names = {"400m": "400 m", "1k": "1 km", "mile": "miglio", "5k": "5 km",
+             "10k": "10 km", "half": "mezza", "marathon": "maratona"}
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(8, 3.2))
+    xs = range(len(prof))
+    pcts = [p["42d_pct_of_1y"] for p in prof]
+    ax.bar(xs, pcts, width=0.6, color=_AQUA)
+    for i, p in enumerate(prof):
+        ax.text(i, pcts[i] - 3, f"{pcts[i]}%\n{p.get('42d_time')}", ha="center", va="top",
+                color=_SURFACE, fontsize=9)
+    ax.axhline(100, color=_INK_2, lw=0.8, ls=":")
+    ax.set_xticks(list(xs), [names.get(p["distance"], p["distance"]) for p in prof])
+    ax.set_ylim(0, 120)
+    ax.set_ylabel("% velocità migliore 12 mesi")
+    ax.grid(axis="x", visible=False)
+    cs = (curve.get("critical_speed") or {}).get("42d")
+    if cs and cs.get("cs_pace"):
+        tag = f"velocità critica {cs['cs_pace']}" + ("" if cs.get("trustworthy") else " (stima debole)")
+        ax.text(len(prof) - 0.5, 112, tag, ha="right", color=_INK_2, fontsize=8)
+    ax.set_title(title)
+    return Chart(title, _png(fig))
+
+
+def main_sport(acts: list[dict[str, Any]], today: date, days: int = 42) -> str:
+    """Which sport the profile chart should be about: the one with more hours
+    in the last six weeks. A tie, or no data, stays on the bike."""
+    since = (today - timedelta(days=days)).isoformat()
+    hours = {"cycling": 0.0, "running": 0.0}
+    for a in acts:
+        if icu_mod.is_stub(a) or icu_mod._day(a) <= since:
+            continue
+        fam = icu_mod._family(a)
+        if fam in hours:
+            hours[fam] += (a.get("moving_time") or 0) / 3600
+    return "running" if hours["running"] > hours["cycling"] else "cycling"
+
+
 def trend(hist: dict[str, Any]) -> Chart:
     title = "Andamento settimanale: eFTP e ore per sport"
     weeks = hist.get("weeks") or []
@@ -512,13 +556,22 @@ def weekly_load(hist: dict[str, Any], current: str) -> Chart:
 
 async def coach_week(icu: "icu_mod.Intervals", today: date) -> list[Chart]:
     """The six charts of the Sunday report, for the ISO week holding `today`,
-    then one profile per workout already planned for the week after."""
+    then one profile per workout already planned for the week after. The fifth
+    is the profile of the athlete's main sport over the last six weeks: power
+    for a cyclist, pace for a runner."""
     monday = today - timedelta(days=today.weekday())
     rows, _ = await icu.wellness(today - timedelta(days=181), today, today)
     acts, _ = await icu.activities(today - timedelta(days=181), today, today)
     settings, _ = await icu.sport_settings()
-    curves, _ = await icu.power_curves()
     rows, acts = rows or [], acts or []
+    sport = main_sport(acts, today)
+    if sport == "running":
+        curves, _ = await icu.pace_curves()
+        run = next((s for s in settings or [] if icu_mod._RUN_TYPES & set(s.get("types") or [])), {})
+        profile = lambda: pace_profile(icu_mod.pace_curve(curves, run.get("threshold_pace")))
+    else:
+        curves, _ = await icu.power_curves()
+        profile = lambda: power_profile(icu_mod.power_curve(curves))
     in28 = [a for a in acts if icu_mod._day(a) > (today - timedelta(days=28)).isoformat()]
     in_week = [a for a in acts if icu_mod._day(a) >= monday.isoformat()]
     ride = next((s for s in settings or [] if "Ride" in (s.get("types") or [])), {})
@@ -529,7 +582,7 @@ async def coach_week(icu: "icu_mod.Intervals", today: date) -> list[Chart]:
         lambda: fitness(rows, today),
         lambda: intensity(icu_mod.load(rows, in28, today)),
         lambda: recovery(rows, today, icu.hrv_cutover),
-        lambda: power_profile(icu_mod.power_curve(curves)),
+        profile,
         lambda: trend(hist),
     )
     charts = []
@@ -549,6 +602,9 @@ async def coach_week(icu: "icu_mod.Intervals", today: date) -> list[Chart]:
     return charts
 
 
+PACE_TITLE = "Curva di passo: ultime 6 settimane in % del migliore dell'anno"
+
+# The fifth title is the cyclist's; a runner's report has PACE_TITLE there.
 TITLES = {
     "coach-week": [
         "Carico giornaliero della settimana",

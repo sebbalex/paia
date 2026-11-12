@@ -16,8 +16,8 @@ the week coming is the next one.
 
 Data, all through the tools: `coach_week` for this week and next,
 `coach_sessions` (14 days), `coach_load`, `coach_history` (182 days),
-`coach_readiness`, `coach_thresholds`, and `coach_power_curve` if a gap
-matters. Open `coach_activity` on each session of the week that was hard or
+`coach_readiness`, `coach_thresholds`, and `coach_power_curve` (bike) or
+`coach_pace_curve` (run) if a gap matters. Open `coach_activity` on each session of the week that was hard or
 long (a set, IF ≥ 0.80, or ≥ 2.5 h), and judge it against "Last prescribed"
 in `memory/wiki/training.md` when it was a prescribed one.
 

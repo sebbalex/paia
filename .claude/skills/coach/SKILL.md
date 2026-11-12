@@ -115,7 +115,7 @@ pad.
 
 ## 2. Data access: only the tools
 
-Eight reads and one write, all over Intervals.icu:
+Nine reads and one write, all over Intervals.icu:
 
 | Tool | For |
 |---|---|
@@ -126,6 +126,7 @@ Eight reads and one write, all over Intervals.icu:
 | `coach_week` | planned vs done for an ISO week |
 | `coach_history` | weekly trend over months: CTL, load, HRV, RHR; ride: eFTP, EF, Pw:HR Z2, hours; run: hours, km, speed per beat on easy runs |
 | `coach_power_curve` | bike only: best 5 s / 1 min / 5 min / 20 min / 60 min, 42 d vs 84 d vs 1 y, W/kg |
+| `coach_pace_curve` | run only: best grade-adjusted 400 m / 1 km / mile / 5 km / 10 km / half / marathon, 42 d vs 84 d vs 1 y; critical speed (CS pace, D′, the efforts behind it, `trustworthy`, % of threshold pace) |
 | `coach_thresholds` | per sport: FTP, eFTP, zones in watts, sweet spot; run threshold pace and pace zones in min/km; LTHR, max HR, and whether a sport's HR zones were copied from the bike |
 | `coach_plan_workout` | the one write: a session onto the Intervals calendar → Garmin → watch or head unit (§5, "Putting a session on the device") |
 

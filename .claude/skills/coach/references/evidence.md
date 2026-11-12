@@ -171,6 +171,16 @@ transfers well; exact magnitudes do not. Say so when it matters.
 - Intervals at or near the speed of VO2max (≈ 3–5 min reps) are the most
   direct way to raise VO2max in runners. **Moderate** (review). Midgley,
   McNaughton & Jones 2007, Sports Med; Billat 2001, Sports Med.
+- Critical speed (CS) marks the boundary between the heavy and severe
+  intensity domains: below it a steady state is reached, above it the
+  distance that can be covered (D′) is finite. It is estimated from maximal
+  efforts spanning roughly 2 to 15 minutes. **Strong** (review). Jones,
+  Vanhatalo, Burnley, Morton & Poole 2010, Med Sci Sports Exerc.
+- CS estimated from recreational runners' own training data, not lab tests,
+  tracked their marathon performance. **Moderate** (observational, large
+  sample). Smyth & Muniz-Pumares 2020, Med Sci Sports Exerc. Consequence:
+  a CS from training is usable, but only as good as the hardest efforts in
+  the window.
 - Downhill running causes far more eccentric muscle damage and soreness than
   level or uphill running at the same effort. **Moderate**. Eston,
   Mickleborough & Baltzopoulos 1995, Br J Sports Med. Consequence: on trail,

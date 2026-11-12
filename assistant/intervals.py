@@ -9,7 +9,7 @@ COACH.md wanted from the scripts survives intact -- the model never builds a
 URL, never sees the API key, and gets finished numbers rather than raw
 streams to average in its head.
 
-Eight reads and one write:
+Nine reads and one write:
 
     coach_readiness   today's wellness, HRV band, RHR, sleep, ImReady4 advice
     coach_load        CTL/ATL/TSB, ACWR (context only), monotony, TID, durability
@@ -18,6 +18,7 @@ Eight reads and one write:
     coach_week        planned vs executed for one ISO week
     coach_history     weekly CTL / eFTP / load / HRV / Pw:HR over months
     coach_power_curve best power 5 s to 60 min, recent against the season
+    coach_pace_curve  best run times 400 m to marathon, critical speed
     coach_thresholds  FTP, zones in watts, threshold pace, LTHR, max HR per sport
     coach_plan_workout  put one planned workout on the Intervals.icu calendar,
                       or rewrite one this assistant put there
@@ -345,6 +346,14 @@ class Intervals:
         return await self.get(
             f"/athlete/{self._athlete}/power-curves",
             {"type": "Ride", "curves": ",".join(_CURVES)},
+            _TTL_CURVES,
+        )
+
+    async def pace_curves(self):
+        # Grade-adjusted: a best 5 km on a hilly route is not a slow 5 km.
+        return await self.get(
+            f"/athlete/{self._athlete}/pace-curves",
+            {"type": "Run", "curves": ",".join(_CURVES), "gap": "true"},
             _TTL_CURVES,
         )
 
@@ -889,6 +898,41 @@ def power_curve(payload: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def pace_curve(payload: dict[str, Any] | None, threshold_ms: float | None = None) -> dict[str, Any]:
+    """Best run times per distance, recent against the season, and the
+    critical-speed fit of the recent window."""
+    curves, window, raw = {}, {}, {}
+    basis = None
+    for c in (payload or {}).get("list") or []:
+        cid = c.get("id")
+        if cid not in _CURVES:
+            continue
+        dist, secs = c.get("distance") or [], c.get("values") or []
+        curves[cid] = m.pick_pace_curve(dist, secs)
+        raw[cid] = (c, dist, secs)
+        basis = basis or c.get("type")
+        window[cid] = [str(c.get("start_date_local"))[:10], str(c.get("end_date_local"))[:10]]
+    missing = [f"no {cid} curve returned" for cid in _CURVES if cid not in curves]
+    cs = {}
+    for cid, (c, dist, secs) in raw.items():
+        model = next((x for x in c.get("paceModels") or [] if x.get("type") == "CS"), None)
+        cs[cid] = m.critical_speed(model, dist, secs, threshold_ms)
+    if not threshold_ms:
+        missing.append("no threshold pace in the run settings: CS cannot be compared to it")
+    return {
+        "sport": "Run (Run, TrailRun, VirtualRun)",
+        "basis": "gap" if basis == "GAP" else "pace" if basis else None,
+        "windows": window,
+        "profile": m.pace_profile(curves, "42d", "1y"),
+        "critical_speed": cs,
+        "note": "best single effort per distance in each window, grade-adjusted. "
+                "A slow recent number can mean lost fitness or simply no hard "
+                "effort at that distance lately -- check before calling it a loss. "
+                "Distances longer than any run in a window are absent",
+        "missing_inputs": missing,
+    }
+
+
 def _event(e: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": e.get("id"),
@@ -1358,6 +1402,24 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
         return _text(power_curve(payload), meta)
 
     @tool(
+        "coach_pace_curve",
+        "Running only. Best grade-adjusted run times at 400 m, 1 km, mile, 5 km, "
+        "10 km, half and marathon over the last 42 days, 84 days and year, the "
+        "42-day speed as % of the year's best, and the critical-speed fit (CS "
+        "pace, D', the efforts it rests on, whether it can be trusted, and how it "
+        "compares to the threshold pace set in Intervals). Read-only.",
+        {},
+    )
+    async def coach_pace_curve(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            payload, meta = await icu.pace_curves()
+            settings, _ = await icu.sport_settings()
+        except IntervalsError as exc:
+            return _fail(str(exc))
+        run = next((s for s in settings or [] if _RUN_TYPES & set(s.get("types") or [])), {})
+        return _text(pace_curve(payload, run.get("threshold_pace")), meta)
+
+    @tool(
         "coach_week",
         "One ISO week (default the current one): workouts planned in the "
         "Intervals.icu calendar and whether each was done, other calendar "
@@ -1569,7 +1631,7 @@ def build_tools(icu: Intervals, clock=date.today, desk: Any = None) -> list[Any]
 
     tools = [
         coach_readiness, coach_load, coach_activity, coach_sessions,
-        coach_week, coach_history, coach_power_curve, coach_thresholds,
+        coach_week, coach_history, coach_power_curve, coach_pace_curve, coach_thresholds,
         coach_plan_workout,
     ]
     return tools + ([coach_report] if desk is not None else [])
