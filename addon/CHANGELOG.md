@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.25
+
+- The coach reads a run's reps on pace again when the watch records power. A Forerunner estimates power on every run, so `coach_activity` judged every structured run like a ride (watts, % of FTP) and returned no pace per rep. Runs now always get the pace-based `main_set` (pace per rep, GAP, % of threshold, fade, CV), with the same reps in watts alongside in `main_set_power`. Run zones, and the training split built on them, now use pace or GAP zones first and power only when no pace zones came through.
+
 ## 0.3.24
 
 - Update Section11

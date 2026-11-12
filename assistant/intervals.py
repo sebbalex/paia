@@ -547,17 +547,20 @@ def _daily_by_sport(acts: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
 
 
 def _zone_secs(a: dict[str, Any]) -> tuple[list[float] | None, str | None]:
-    """Power zones preferred, then pace on a run, HR as fallback (Section 11
-    zone preference). A run's pace zones are grade-adjusted when the athlete's
-    run settings say so (`use_gap_zone_times`), as Intervals itself shows them."""
-    secs = m.zone_seconds(a.get("icu_zone_times"))
-    if secs and sum(secs) > 0:
-        return secs, "power"
+    """Power zones on a ride, pace zones on a run, HR as fallback (Section 11
+    zone preference). A run goes to pace first even when the watch records
+    power: running power (often estimated, as on a Forerunner) is not what run
+    zones are set on, so it comes second. A run's pace zones are grade-adjusted
+    when the athlete's run settings say so (`use_gap_zone_times`), as Intervals
+    itself shows them."""
+    power = m.zone_seconds(a.get("icu_zone_times"))
     if a.get("type") in _RUN_TYPES:
         gap = bool(a.get("use_gap_zone_times"))
         secs = m.zone_seconds(a.get("gap_zone_times" if gap else "pace_zone_times"))
         if secs and sum(secs) > 0:
             return secs, "gap" if gap else "pace"
+    if power and sum(power) > 0:
+        return power, "power"
     secs = m.zone_seconds(a.get("icu_hr_zone_times"))
     if secs and sum(secs) > 0:
         return secs, "hr"
@@ -740,10 +743,18 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
                     "a hard 3-20 min effort cannot raise it",
         },
         "interval_summary": a.get("interval_summary"),
+        # A run is judged on pace even when the watch records power (a
+        # Forerunner estimates it on every run); the power read of the same
+        # reps rides alongside in main_set_power.
         "main_set": (
             m.run_interval_set(a.get("icu_intervals") or [], a.get("threshold_pace"))
-            if run and not a.get("icu_average_watts")
+            if run
             else m.interval_set(a.get("icu_intervals") or [], ftp)
+        ),
+        "main_set_power": (
+            m.interval_set(a.get("icu_intervals") or [], ftp)
+            if run and a.get("icu_average_watts")
+            else None
         ),
         "warmup_min": round(a["icu_warmup_time"] / 60) if a.get("icu_warmup_time") else None,
         "fuel": m.fuel(moving, a.get("carbs_used"), a.get("carbs_ingested")),

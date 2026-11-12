@@ -87,7 +87,11 @@ lost on fuelling, and
 ## 3b. Reading a run
 
 `coach_activity` on a run carries `pace` (avg, `gap`, `pct_threshold`) and,
-for a structured run without power, a pace-based `main_set`.
+for a structured run, a pace-based `main_set` (pace per rep, fade, CV). When
+the watch also records power (a Forerunner estimates it on every run), the
+same reps read in watts are in `main_set_power`; judge the run on pace, use
+watts as a second view. Zones on a run are pace (or GAP) first, power only
+when no pace zones came through.
 
 - **Pace on hills is GAP.** Raw pace on a rolling route says nothing; judge
   `gap`, and on trail judge HR and vertical only.

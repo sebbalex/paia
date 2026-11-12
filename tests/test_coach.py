@@ -685,6 +685,19 @@ def test_running() -> None:
     check("run main set on pace", a["main_set"]["pace_basis"], "gap")
     check("run main set fade", a["main_set"]["pace_fade_pct"], -7.1)
     check("run fade flagged", any("pace faded" in f for f in a["main_set"]["flags"]), True)
+    check("run without power has no power set", a["main_set_power"], None)
+
+    # A Forerunner records estimated power on every run: pace still wins.
+    wreps = [{**r, "average_watts": 300 - i} for i, r in enumerate(reps)]
+    a = icu_mod.activity(run(0, icu_intervals=wreps, icu_average_watts=280, icu_ftp=320,
+                             icu_zone_times=[{"id": "Z1", "secs": 4000}]))
+    check("run with power main set on pace", a["main_set"]["pace_basis"], "gap")
+    check("run with power keeps pace per rep", a["main_set"]["rep_detail"][0]["pace"], "3:58/km")
+    check("run with power also reads watts", a["main_set_power"]["reps"], 6)
+    check("run with power zones on gap", a["zones"]["basis"], "gap")
+    check("run with power only falls back to power",
+          icu_mod.activity(run(0, gap_zone_times=None, pace_zone_times=None, icu_average_watts=280,
+                               icu_zone_times=[{"id": "Z1", "secs": 4000}]))["zones"]["basis"], "power")
 
     load = icu_mod.load(wellness_rows(), [ride(1), run(2)], TODAY)
     check("running load split", (load["load_7d_cycling"], load["load_7d_running"]), (80, 70))
