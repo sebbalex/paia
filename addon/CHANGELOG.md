@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.28
+
+- Next week's run workouts in the weekly report are drawn in pace, like Intervals draws them: target pace over time (faster higher), labelled in min/km, coloured by pace zone, with the threshold pace as a dotted line. Pace zones, % of threshold pace, ramps and min/km targets are read; a step by distance takes its time from its own target pace; an HR-only step is drawn grey. Before, a run workout showed its duration and no targets.
+
 ## 0.3.27
 
 - New read for runners, `coach_pace_curve`: best grade-adjusted times at 400 m, 1 km, mile, 5 km, 10 km, half and marathon over 42 days, 84 days and the year, with the recent speed as % of the year's best. It also returns Intervals' critical-speed fit (CS pace, D′, the efforts it rests on) and says whether it can be trusted: three or more efforts of 2–15 minutes, spread in duration, and a tight fit. A trusted CS is compared to the threshold pace in the run settings, so a stale threshold shows up.

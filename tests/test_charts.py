@@ -111,6 +111,49 @@ def main() -> int:
     check("no ftp: placeholder, not a crash",
           cc.workout_profile("x", None, steps, None).png.startswith(PNG), "")
 
+    print("\nrun workout profiles")
+    run_text = """- 15m Z2 Pace
+- 1km 100-104% Pace
+
+Main set 4x
+- 3m 4:05-3:58/km Pace
+- 2m 70% Pace
+
+- 400mtr HR Z2
+- 10m ramp 80-90% Pace
+- 5m 70% HR
+"""
+    rs = cc.parse_workout(run_text)
+    check("pace zone target", rs[0]["pace"] == {"units": "pace_zone", "value": 2}, str(rs[0]))
+    check("distance step with % pace",
+          rs[1].get("distance") == 1000 and rs[1]["pace"] == {"units": "%pace", "start": 100, "end": 104},
+          str(rs[1]))
+    check("min/km range", rs[2]["steps"][0]["pace"] == {"units": "secs_km", "start": 245, "end": 238},
+          str(rs[2]))
+    check("pace is not read as power", "power" not in rs[2]["steps"][1], str(rs[2]["steps"][1]))
+    check("400mtr is metres, not minutes", rs[3].get("distance") == 400 and "duration" not in rs[3],
+          str(rs[3]))
+    check("pace ramp", rs[4].get("ramp") is True and rs[4]["pace"]["units"] == "%pace", str(rs[4]))
+    check("HR step on a run has no pace", "pace" not in rs[5] and "power" not in rs[5], str(rs[5]))
+    zones = [77.5, 87.7, 94.3, 100, 103.4, 111.5, 999]
+    lo, hi = cc._speeds({"units": "pace_zone", "value": 4}, 4.0, zones)
+    check("Z4 pace spans its band", (round(lo, 3), round(hi, 3)) == (3.772, 4.0), str((lo, hi)))
+    check("zone without pace zones unresolved",
+          cc._speeds({"units": "pace_zone", "value": 2}, 4.0, None) is None, "")
+    rp = cc.run_workout_profile("Soglia corsa", date(2026, 11, 17), rs, 4.0, zones, 55)
+    check("run profile draws", rp.png.startswith(PNG) and len(rp.png) > 5000, str(len(rp.png)))
+    check("run profile without threshold: placeholder",
+          cc.run_workout_profile("x", None, rs, None).png.startswith(PNG), "")
+    run_cal = [{"category": "WORKOUT", "type": "Run", "name": "Soglia corsa",
+                "start_date_local": "2026-10-29T00:00:00", "description": run_text,
+                "workout_doc": {"steps": [{"duration": 900}]}}]
+    rprof = cc.planned_workouts(run_cal + cal, 273, None, {"threshold_pace": 4.0, "pace_zones": zones})
+    check("run workouts join the ride profiles in date order",
+          [c.title for c in rprof] == ["Allenamento: Soglia, mar 27 ott",
+                                       "Allenamento: VO2 30/15, mer 28 ott",
+                                       "Allenamento: Soglia corsa, gio 29 ott"],
+          str([c.title for c in rprof]))
+
     import asyncio as _aio
     from assistant import intervals as icu_mod
 

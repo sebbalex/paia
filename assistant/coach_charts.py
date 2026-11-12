@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
+from . import coach_metrics as cm
 from . import intervals as icu_mod
 
 log = logging.getLogger(__name__)
@@ -340,6 +341,20 @@ _TARGETS = (
     (re.compile(r"(?<!\w)Z([1-7])\b" + r"(?!\s*(?:LT)?HR|\s*Pace)"), "power_zone", False),
 )
 _REPEAT = re.compile(r"(?:^|\s)(\d+)\s*x\s*$", re.I)
+# Run targets, in the syntax the coach writes (run-library.md): a pace zone,
+# % of threshold speed (above 100 is faster), or min/km. Intervals.icu reads
+# "Pace" after the number as the marker, as it does "HR".
+_NUM = r"(\d+(?:\.\d+)?)"
+_PACE_TARGETS = (
+    (re.compile(r"\bramp\s+" + _NUM + r"\s*-\s*" + _NUM + r"\s*%\s*Pace\b", re.I), "%pace", True),
+    (re.compile(r"(?<![\w.])" + _NUM + r"\s*-\s*" + _NUM + r"\s*%\s*Pace\b", re.I), "%pace", False),
+    (re.compile(r"(?<![\w.-])" + _NUM + r"\s*%\s*Pace\b", re.I), "%pace", False),
+    (re.compile(r"(?<!\w)Z([1-7])\s*Pace\b", re.I), "pace_zone", False),
+    (re.compile(r"(?<![\w:])(\d+):(\d{2})\s*(?:-\s*(\d+):(\d{2}))?\s*/km\b", re.I), "secs_km", False),
+)
+# A step by distance: '1km', '1.5km', '400mtr' (Intervals.icu writes metres
+# as 'mtr', because 'm' is minutes).
+_DIST = re.compile(r"^(\d+(?:\.\d+)?)(km|mtr)$", re.I)
 
 
 def _seconds(token: str) -> int | None:
@@ -366,6 +381,32 @@ def _target(text: str) -> dict[str, Any] | None:
     return None
 
 
+def _pace_target(text: str) -> dict[str, Any] | None:
+    """The first pace target in a run step's text."""
+    found = [(m.start(), i, m, units, ramp) for i, (rx, units, ramp) in enumerate(_PACE_TARGETS)
+             if (m := rx.search(text))]
+    for _, _, m, units, ramp in sorted(found, key=lambda f: f[:2])[:1]:
+        g = [x for x in m.groups() if x is not None]
+        if units == "secs_km":
+            nums = [int(g[0]) * 60 + int(g[1])] + ([int(g[2]) * 60 + int(g[3])] if len(g) == 4 else [])
+        else:
+            nums = [float(x) for x in g]
+        out: dict[str, Any] = {"units": units}
+        if len(nums) == 2:
+            out["start"], out["end"] = nums
+        else:
+            out["value"] = nums[0]
+        return {"pace": out, **({"ramp": True} if ramp else {})}
+    return None
+
+
+def _distance(token: str) -> float | None:
+    m = _DIST.match(token)
+    if not m:
+        return None
+    return float(m.group(1)) * (1000 if m.group(2).lower() == "km" else 1)
+
+
 def parse_workout(text: str) -> list[dict[str, Any]]:
     """Intervals.icu workout text -> `workout_doc` steps, for drawing only.
 
@@ -386,17 +427,18 @@ def parse_workout(text: str) -> list[dict[str, Any]]:
         if line.startswith("-"):
             body = line[1:].strip()
             head, _, rest = body.partition(" ")
-            secs = _seconds(head)
-            if secs is None:
+            secs, dist = _seconds(head), _distance(head)
+            if secs is None and dist is None:
                 continue
-            step = {"duration": secs, **(_target(rest) or {})}
+            target = _pace_target(rest) or _target(rest) or {}
+            step = {"duration": secs, **target} if secs is not None else {"distance": dist, **target}
             (block["steps"] if block is not None else steps).append(step)
             continue
         m = _REPEAT.search(line)
         if m:
             block = {"reps": int(m.group(1)), "text": line, "steps": []}
             steps.append(block)
-    return [s for s in steps if s.get("duration") or s.get("steps")]
+    return [s for s in steps if s.get("duration") or s.get("distance") or s.get("steps")]
 
 
 def _flat(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -406,7 +448,7 @@ def _flat(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
             inner = _flat(s["steps"])
             for _ in range(int(s.get("reps") or 1)):
                 out.extend(inner)
-        elif s.get("duration"):
+        elif s.get("duration") or s.get("distance"):
             out.append(s)
     return out
 
@@ -506,22 +548,156 @@ def workout_profile(name: str, day: date | None, steps: list[dict[str, Any]],
     return Chart(title, _png(fig))
 
 
+def _speeds(pace: dict[str, Any] | None, threshold_ms: float,
+            zones: tuple | list | None) -> tuple[float, float] | None:
+    """(low, high) speed in m/s of a pace target; None when there is none or
+    it cannot be resolved (a zone with no pace zones set)."""
+    if not pace:
+        return None
+    units = pace.get("units")
+    lo = pace.get("start", pace.get("value"))
+    hi = pace.get("end", pace.get("value"))
+    if lo is None or hi is None:
+        return None
+    if units == "%pace":
+        return threshold_ms * lo / 100, threshold_ms * hi / 100
+    if units == "secs_km":
+        return 1000 / lo, 1000 / hi
+    if units == "pace_zone" and zones:
+        z = int(lo)
+        if not 1 <= z <= len(zones):
+            return None
+        # Zones are upper bounds in % of threshold speed. Z1 has no floor:
+        # draw it from a tenth below its ceiling; the top zone is open, drawn
+        # a tenth above its floor.
+        top = zones[z - 1] if zones[z - 1] < 999 else zones[z - 2] * 1.1
+        bottom = zones[z - 2] if z > 1 else top * 0.9
+        return threshold_ms * bottom / 100, threshold_ms * top / 100
+    return None
+
+
+def _pace_colour(speed: float, threshold_ms: float, zones: tuple | list | None) -> str:
+    if not zones:
+        return _AQUA
+    pct = 100 * speed / threshold_ms
+    for i, top in enumerate(list(zones)[: len(_ZONE)]):
+        if pct <= top:
+            return _ZONE[i]
+    return _ZONE[-1]
+
+
+def run_workout_profile(name: str, day: date | None, steps: list[dict[str, Any]],
+                        threshold_ms: float | None, zones: tuple | list | None = None,
+                        load: float | None = None) -> Chart:
+    """One planned run drawn as Intervals.icu draws it: blocks of target
+    speed over time (faster is higher), labelled in min/km, coloured by pace
+    zone, threshold pace as a dotted line. A step by distance takes its time
+    from its own target pace; one with no pace target is grey."""
+    when = f"{_DAYS_IT[day.weekday()]} {day.day} {_MONTHS_IT[day.month - 1]}" if day else ""
+    title = "Allenamento: " + name + (f", {when}" if when else "")
+    flat = _flat(steps)
+    if not flat:
+        return _empty(title, "Nessun passo leggibile nel testo dell'allenamento.")
+    if not threshold_ms:
+        return _empty(title, "Passo soglia non impostato in Intervals.icu: passi non disegnabili.")
+    plt = _plt()
+    from matplotlib.patches import Polygon
+
+    fig, ax = plt.subplots(figsize=(8, 2.6))
+    t, top, blind, unknown = 0.0, threshold_ms, 0, 0
+    # The axis starts at 60 % of threshold speed (a walk-jog): below that,
+    # pace labels crowd together and say nothing.
+    floor = threshold_ms * 0.6
+    for s in flat:
+        v = _speeds(s.get("pace"), threshold_ms, zones)
+        d = s.get("duration")
+        if not d and s.get("distance"):
+            if v is None:
+                # No pace to turn the distance into time: it is not drawn.
+                unknown += 1
+                continue
+            d = s["distance"] / ((v[0] + v[1]) / 2)
+        d = float(d)
+        x0, x1 = t / 60, (t + d) / 60
+        if v is None:
+            blind += 1
+            ax.add_patch(Polygon([(x0, floor), (x0, threshold_ms * 0.7), (x1, threshold_ms * 0.7),
+                                  (x1, floor)], closed=True, facecolor=_GRID, edgecolor=_INK_2,
+                                 hatch="///", lw=0.5))
+        elif s.get("ramp"):
+            ax.add_patch(Polygon([(x0, floor), (x0, v[0]), (x1, v[1]), (x1, floor)], closed=True,
+                                 facecolor=_pace_colour(max(v), threshold_ms, zones), alpha=0.85, lw=0))
+        else:
+            lo, hi = min(v), max(v)
+            colour = _pace_colour((lo + hi) / 2, threshold_ms, zones)
+            ax.add_patch(Polygon([(x0, floor), (x0, lo), (x1, lo), (x1, floor)], closed=True,
+                                 facecolor=colour, alpha=0.85, edgecolor=_SURFACE, lw=0.4))
+            if hi > lo:
+                ax.add_patch(Polygon([(x0, lo), (x0, hi), (x1, hi), (x1, lo)], closed=True,
+                                     facecolor=colour, alpha=0.35, lw=0))
+        top = max(top, *(v or (0,)))
+        t += d
+    if not t:
+        return _empty(title, "Nessun passo con durata o passo per disegnarlo.")
+    pace_str = cm.pace_str
+    ax.axhline(threshold_ms, color=_INK_2, lw=0.8, ls=":")
+    ax.text(t / 60, threshold_ms, f"soglia {pace_str(threshold_ms)} ", ha="right", va="bottom",
+            color=_INK_2, fontsize=8)
+    ax.set_xlim(0, t / 60)
+    ax.set_ylim(floor, top * 1.08)
+    # Ticks on round paces (every 30 s/km, or a minute on a wide range), not
+    # on round speeds: a runner reads 4:30, not 3.7 m/s.
+    slow, fast = 1000 / floor, 1000 / (top * 1.08)
+    step = 30 if slow - fast <= 150 else 60
+    ticks = [1000 / p for p in range(int(math.ceil(fast / step) * step), int(slow) + 1, step)]
+    ax.set_yticks(ticks, [(pace_str(y) or "").replace("/km", "") for y in ticks])
+    ax.set_xlabel("minuti")
+    ax.set_ylabel("passo (min/km)")
+    ax.grid(axis="x", visible=False)
+    facts = [_clock(t)] + ([f"carico {load:.0f}"] if load else [])
+    if blind:
+        facts.append("1 passo senza target, in grigio" if blind == 1
+                     else f"{blind} passi senza target, in grigio")
+    if unknown:
+        facts.append("1 passo a distanza senza target, non disegnato" if unknown == 1
+                     else f"{unknown} passi a distanza senza target, non disegnati")
+    ax.set_title(title + "\n", loc="left")
+    ax.text(0, 1.02, "  ·  ".join(facts), transform=ax.transAxes, color=_INK_2, fontsize=9)
+    return Chart(title, _png(fig))
+
+
 def planned_workouts(events: list[dict[str, Any]], ftp: float | None,
-                     zones: tuple | list | None) -> list[Chart]:
-    """Profiles of the workouts on the Intervals.icu calendar, as Intervals
-    parsed them. Date order, at most MAX_WORKOUTS; workouts with no steps
-    (gym, a note) are left out."""
+                     zones: tuple | list | None,
+                     run: dict[str, Any] | None = None) -> list[Chart]:
+    """Profiles of the workouts on the Intervals.icu calendar. Date order, at
+    most MAX_WORKOUTS; workouts with no steps (gym, a note) are left out.
+
+    A ride is drawn from the steps Intervals parsed (`workout_doc`), in watts.
+    A run is drawn in pace from its own text, in the syntax the coach writes:
+    how Intervals stores a pace target inside `workout_doc` has not been
+    observed, so it is not guessed at. `run` is the run sport settings
+    (threshold_pace, pace_zones)."""
+    run = run or {}
     items = []
     for e in events:
-        steps = (e.get("workout_doc") or {}).get("steps") or []
-        if e.get("category") != "WORKOUT" or not steps:
+        if e.get("category") != "WORKOUT":
             continue
-        items.append((icu_mod._day(e), str(e.get("name") or "Allenamento"), steps,
+        is_run = e.get("type") in icu_mod._RUN_TYPES
+        steps = (parse_workout(e.get("description") or "") if is_run
+                 else (e.get("workout_doc") or {}).get("steps") or [])
+        if not steps:
+            continue
+        items.append((icu_mod._day(e), str(e.get("name") or "Allenamento"), is_run, steps,
                       e.get("icu_training_load")))
     charts = []
-    for day, name, steps, load in sorted(items, key=lambda i: i[:2])[:MAX_WORKOUTS]:
+    for day, name, is_run, steps, load in sorted(items, key=lambda i: i[:2])[:MAX_WORKOUTS]:
         try:
-            charts.append(workout_profile(name, date.fromisoformat(day), steps, ftp, zones, load))
+            when = date.fromisoformat(day)
+            charts.append(
+                run_workout_profile(name, when, steps, run.get("threshold_pace"),
+                                    run.get("pace_zones"), load)
+                if is_run else workout_profile(name, when, steps, ftp, zones, load)
+            )
         except Exception:
             log.exception("workout chart failed")
     return charts
@@ -598,7 +774,8 @@ async def coach_week(icu: "icu_mod.Intervals", today: date) -> list[Chart]:
     except icu_mod.IntervalsError:
         log.exception("next week's events unreadable; no workout profiles")
         evs = []
-    charts += planned_workouts(evs or [], ride.get("ftp"), ride.get("power_zones"))
+    run = next((s for s in settings or [] if icu_mod._RUN_TYPES & set(s.get("types") or [])), {})
+    charts += planned_workouts(evs or [], ride.get("ftp"), ride.get("power_zones"), run)
     return charts
 
 

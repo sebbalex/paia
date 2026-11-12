@@ -49,7 +49,11 @@ legs can take. So, always:
    and keep the next day easy.
 
 **Write steps in time, not distance.** Intervals and the report charts both
-handle `- 10m ...` reliably; distance steps are not drawn. Syntax for
+handle `- 10m ...` reliably. A distance step (`- 1km ...`, `- 400mtr ...`;
+`m` is minutes, metres are `mtr`) is drawn only when it has a pace target to
+turn it into time. The report draws a run from this text, in pace: targets
+as `Z2 Pace`, `95-100% Pace`, `ramp 80-90% Pace` or `4:05-3:58/km Pace`; an
+HR target is drawn grey. Syntax for
 `coach_plan_workout` (type `Run` or `TrailRun`):
 
 ```

@@ -462,9 +462,11 @@ The prompt that will run, written as if the owner were saying it to you.
 - `charts` is optional and only `coach-week`: Python draws the six training
   charts after your text and attaches them (inline in mail, an album on
   Telegram). You never draw or describe a chart you have not been given; the
-  prompt lists their titles so the text can say "vedi Grafico 3". After the
-  six come the power profiles of next week's workouts already in the
-  Intervals.icu calendar. Keep the field when you edit a routine that has it.
+  prompt lists their titles so the text can say "vedi Grafico 3". The fifth
+  follows the main sport of the last six weeks: power profile for a cyclist,
+  pace profile for a runner. After the six come the profiles of next week's
+  workouts already in the Intervals.icu calendar, in watts for a ride and in
+  pace for a run. Keep the field when you edit a routine that has it.
 - The weekly coach routine files its report with `coach_report` instead of
   writing it out: short fields, hard length limits, routine turns only. The
   transport lays it out as the email and adds the numbers and charts itself.

@@ -60,8 +60,8 @@ folder ids in `DRIVE_ALLOWED_FOLDERS` and everything beneath them. Intervals.icu
 (and so on Garmin Connect and the head unit) only after a preview in an earlier
 turn, never from a routine, and rewrites only workouts it planned itself; routines with
 `charts: coach-week` get six training charts drawn by
-`assistant/coach_charts.py` attached to the message, then a power profile
-for each of next week's calendar workouts. The weekly routine files its
+`assistant/coach_charts.py` attached to the message, then a profile
+for each of next week's calendar workouts (watts for a ride, pace for a run). The weekly routine files its
 report through `coach_report` (short fields), and `assistant/coach_report.py`
 lays it out as a designed email with numbers, trend charts and a profile per
 key session. Skills are live: `.claude/skills/` holds the
