@@ -332,8 +332,22 @@ DURABILITY_MIN_SECS = 5400
 DURABILITY_MAX_VI = 1.05
 
 
+def run_efficiency(gap_ms: float | None, hr: float | None) -> float | None:
+    """A run's aerobic efficiency: grade-adjusted metres per minute per beat.
+
+    The running counterpart of a ride's watts per beat (Friel's efficiency
+    factor on speed). GAP rather than raw speed, so a hilly route is not read
+    as a slow one. Only comparable with itself, on runs of the same kind:
+    its trend on easy runs is the aerobic-fitness signal.
+    """
+    if not gap_ms or not hr or gap_ms <= 0 or hr <= 0:
+        return None
+    return round(gap_ms * 60 / hr, 3)
+
+
 def durability_qualifies(activity: dict[str, Any]) -> bool:
-    """Section 11 aggregate-durability filter: long, steady, decoupling known."""
+    """Section 11 aggregate-durability filter: long, steady, decoupling known.
+    Rides only: the caller passes rides, because the VI gate needs real power."""
     vi = activity.get("icu_variability_index")
     return (
         activity.get("decoupling") is not None
@@ -488,16 +502,21 @@ def decoupling_read(
     decoupling: float | None, vi: float | None, moving_secs: float | None,
     *, run: bool = False,
 ) -> dict[str, Any]:
-    """Whether a session's whole-session Pa:HR decoupling means anything."""
+    """Whether a session's whole-session Pa:HR decoupling means anything.
+
+    The variability index gates a ride. It never gates a run: running power
+    is mostly estimated by the watch (a Forerunner models it from pace and
+    grade), so a VI read off it says nothing about how steady the run was.
+    """
     if decoupling is None:
         return {"readable": "absent", "why": "no decoupling (no power or pace, or no HR)"}
     if (moving_secs or 0) < DECOUPLING_MIN_SECS:
         return {"readable": "no", "why": "under 60 min: too short to show drift"}
-    if run and vi is None:
-        # A run without power has no variability index to say it was steady:
-        # pace on hills, stops and surges all move the number.
-        return {"readable": "rough", "why": "run without power: pace:HR, steadiness "
-                "unknown; trust it on flat, even runs only, trend only"}
+    if run:
+        # Hills, stops and surges all move the number, and nothing here can
+        # say whether the run was steady.
+        return {"readable": "rough", "why": "run: steadiness unknown; trust it on "
+                "flat, even runs only, trend only"}
     if vi is None:
         return {"readable": "no", "why": "variability index unknown"}
     if vi <= DURABILITY_MAX_VI:

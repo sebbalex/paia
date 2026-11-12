@@ -106,22 +106,29 @@ def daily_load(monday: date, acts: list[dict[str, Any]]) -> Chart:
     hidden = len(acts) - len(visible)
     by_sport = icu_mod._daily_by_sport(visible)
     days = [(monday + timedelta(days=i)).isoformat() for i in range(7)]
-    cyc = [by_sport["cycling"].get(d, 0.0) for d in days]
-    oth = [by_sport["other"].get(d, 0.0) for d in days]
     plt = _plt()
     fig, ax = plt.subplots(figsize=(8, 3.4))
     x = range(7)
-    ax.bar(x, cyc, width=0.6, color=_BLUE, label="bici", edgecolor=_SURFACE, linewidth=2)
-    ax.bar(x, oth, width=0.6, bottom=cyc, color=_ORANGE, label="altro (gym, hike)",
-           edgecolor=_SURFACE, linewidth=2)
-    for i, total in enumerate(c + o for c, o in zip(cyc, oth)):
+    bottom = [0.0] * 7
+    # One stack per sport, each in its own colour; a sport with no load this
+    # week stays out of the legend.
+    for family, colour, label in (("cycling", _BLUE, "bici"), ("running", _AQUA, "corsa"),
+                                  ("other", _ORANGE, "altro (gym, hike)")):
+        vals = [by_sport[family].get(d, 0.0) for d in days]
+        if not any(vals):
+            continue
+        ax.bar(x, vals, width=0.6, bottom=bottom, color=colour, label=label,
+               edgecolor=_SURFACE, linewidth=2)
+        bottom = [b + v for b, v in zip(bottom, vals)]
+    for i, total in enumerate(bottom):
         if total:
             ax.text(i, total, f"{total:.0f}", ha="center", va="bottom", color=_INK_2, fontsize=9)
     ax.set_xticks(list(x), [f"{_DAYS_IT[i]}\n{days[i][8:]}" for i in x])
     ax.set_ylabel("carico (TSS)")
-    ax.set_ylim(0, max([c + o for c, o in zip(cyc, oth)] + [10]) * 1.25)
+    ax.set_ylim(0, max(bottom + [10]) * 1.25)
     ax.grid(axis="x", visible=False)
-    ax.legend(loc="upper right", ncols=2)
+    if any(bottom):
+        ax.legend(loc="upper right", ncols=3)
     ax.set_title(title + (f"  ({hidden} da Strava, nascoste)" if hidden else ""))
     return Chart(title, _png(fig))
 
@@ -241,7 +248,7 @@ def power_profile(curve: dict[str, Any]) -> Chart:
 
 
 def trend(hist: dict[str, Any]) -> Chart:
-    title = "Andamento settimanale: eFTP e ore in bici"
+    title = "Andamento settimanale: eFTP e ore per sport"
     weeks = hist.get("weeks") or []
     if len(weeks) < 2:
         return _empty(title, "Storico insufficiente.")
@@ -257,9 +264,13 @@ def trend(hist: dict[str, Any]) -> Chart:
         top.text(0, ftp, f" FTP impostato {ftp} W", va="bottom", color=_INK_2, fontsize=8)
     top.set_ylabel("eFTP (W)")
     top.set_title(title)
-    bot.bar(range(len(weeks)), [w.get("ride_hours_visible") or 0 for w in weeks],
-            width=0.6, color=_AQUA)
-    bot.set_ylabel("ore in bici")
+    ride_h = [w.get("ride_hours_visible") or 0 for w in weeks]
+    run_h = [w.get("run_hours_visible") or 0 for w in weeks]
+    bot.bar(range(len(weeks)), ride_h, width=0.6, color=_BLUE, label="bici")
+    if any(run_h):
+        bot.bar(range(len(weeks)), run_h, width=0.6, bottom=ride_h, color=_AQUA, label="corsa")
+        bot.legend(loc="upper left", ncols=2, fontsize=8)
+    bot.set_ylabel("ore")
     bot.grid(axis="x", visible=False)
     step = max(1, len(labels) // 13)
     bot.set_xticks(range(0, len(labels), step), labels[::step], fontsize=8)
@@ -545,7 +556,7 @@ TITLES = {
         "Distribuzione dell'intensità: 7 vs 28 giorni",
         "HRV e frequenza a riposo, 60 giorni",
         "Curva di potenza: ultime 6 settimane in % del migliore dell'anno",
-        "Andamento settimanale: eFTP e ore in bici",
+        "Andamento settimanale: eFTP e ore per sport",
     ],
 }
 

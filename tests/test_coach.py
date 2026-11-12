@@ -677,7 +677,13 @@ def test_running() -> None:
     nothr = icu_mod.activity(run(0, threshold_pace=None))
     check("run without threshold pace named",
           any("threshold pace" in x for x in nothr["missing_inputs"]), True)
-    check("ride has no pace block", icu_mod.activity(ride(0))["pace"], None)
+    r = icu_mod.activity(ride(0))
+    check("ride has no run blocks", [k for k in ("pace", "run_power", "main_set_power") if k in r], [])
+    check("run has no ride blocks",
+          [k for k in ("power", "anaerobic", "estimated_ftp_from_ride", "durability_qualifies") if k in a], [])
+    check("run aerobic is speed per beat", a["aerobic"]["speed_hr"], 1.216)
+    check("run speed per beat", m.run_efficiency(3.0, 148), 1.216)
+    check("run speed per beat without HR", m.run_efficiency(3.0, None), None)
 
     reps = [{"type": "WORK", "group_id": "300s", "moving_time": 300, "start_time": i * 600,
              "gap": v, "average_heartrate": 165 + i} for i, v in enumerate([4.2, 4.2, 4.1, 3.9, 3.9, 3.9])]
@@ -695,6 +701,27 @@ def test_running() -> None:
     check("run with power keeps pace per rep", a["main_set"]["rep_detail"][0]["pace"], "3:58/km")
     check("run with power also reads watts", a["main_set_power"]["reps"], 6)
     check("run with power zones on gap", a["zones"]["basis"], "gap")
+    check("run power is a second view", a["run_power"]["avg_w"], 280)
+    check("run with power never reads VI",
+          icu_mod.activity(run(0, icu_average_watts=280, icu_variability_index=1.02))
+          ["hr"]["decoupling_read"]["readable"], "rough")
+    steady_run = run(1, moving_time=7200, decoupling=2.0, icu_variability_index=1.02,
+                     icu_average_watts=280)
+    load = icu_mod.load(wellness_rows(), [steady_run, ride(1, decoupling=2.0)], TODAY)
+    check("durability counts rides only", load["durability"]["qualifying_28d"], 1)
+    row = icu_mod.sessions([steady_run, ride(2)])["sessions"]
+    check("run row has no ride columns", (row[0]["np_w"], row[0]["vi"]), (None, None))
+    check("run row has threshold pace %", row[0]["pct_threshold_pace"], 75)
+    check("ride row has no run columns", (row[1]["pace_gap"], row[1]["run_speed_hr"]), (None, None))
+
+    easy = run(1, gap_zone_times=[1800, 2200, 100, 0, 0, 0, 0])
+    hard = run(2, gap_zone_times=[1000, 1000, 600, 1200, 400, 0, 0])
+    short = run(3, moving_time=1200, gap_zone_times=[600, 600, 0, 0, 0, 0, 0])
+    check("run aerobic trend counts easy runs only", icu_mod._easy_run(hard), False)
+    check("short run out of run aerobic trend", icu_mod._easy_run(short), True)
+    hh = icu_mod.history(wellness_rows(), [easy, hard, short], 273)
+    wk = [w for w in hh["weeks"] if w["run_speed_hr_easy_mean"] is not None]
+    check("run aerobic trend present", [w["run_speed_hr_easy_mean"] for w in wk], [1.216])
     check("run with power only falls back to power",
           icu_mod.activity(run(0, gap_zone_times=None, pace_zone_times=None, icu_average_watts=280,
                                icu_zone_times=[{"id": "Z1", "secs": 4000}]))["zones"]["basis"], "power")

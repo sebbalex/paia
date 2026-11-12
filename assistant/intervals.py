@@ -627,8 +627,9 @@ def load(
         },
         "tid_7d": _tid(in7),
         "tid_28d": _tid(visible),
-        # Rides only: it gates on the variability index, which needs power.
-        "durability": m.durability(visible, today),
+        # Rides only: it gates on the variability index, which needs measured
+        # power. A run with watch-estimated power is not let in.
+        "durability": m.durability([a for a in visible if _family(a) == "cycling"], today),
         "activities_28d": {"visible": len(visible), "hidden_strava": hidden},
         "missing_inputs": missing,
     }
@@ -650,6 +651,71 @@ def _run_pace(a: dict[str, Any]) -> dict[str, Any]:
         "stride_m": _r(a.get("average_stride"), 2),
         "note": "gap is grade-adjusted pace: on hills read it, not avg. "
                 "pct_threshold is speed as % of threshold speed, so above 100 is faster",
+    }
+
+
+def _ride_blocks(a: dict[str, Any], ftp: Any) -> dict[str, Any]:
+    """What only a ride has: measured power, FTP, W'."""
+    return {
+        "power": {
+            "avg_w": _r(a.get("icu_average_watts"), 0),
+            "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
+            "icu_intensity": _r(a.get("icu_intensity")),
+            "variability_index": _r(a.get("icu_variability_index"), 2),
+            "efficiency_factor": _r(a.get("icu_efficiency_factor"), 2),
+            "lr_balance": _r(a.get("avg_lr_balance")),
+            "ftp_used": ftp,
+            "kj": _r((a.get("icu_joules") or 0) / 1000, 0) if a.get("icu_joules") else None,
+        },
+        "aerobic": {
+            # Watts per beat over the ride and inside Z2: the trend of the Z2
+            # figure in coach_history is the cleanest aerobic-fitness signal
+            # these rides give.
+            "power_hr": _r(a.get("icu_power_hr"), 2),
+            "power_hr_z2": _r(a.get("icu_power_hr_z2"), 2),
+            "power_hr_z2_min": a.get("icu_power_hr_z2_mins"),
+        },
+        "anaerobic": {
+            "kj_above_ftp": _r((a.get("icu_joules_above_ftp") or 0) / 1000, 1)
+            if a.get("icu_joules_above_ftp") is not None else None,
+            "max_w_prime_depletion_kj": _r((a.get("icu_max_wbal_depletion") or 0) / 1000, 1)
+            if a.get("icu_max_wbal_depletion") is not None else None,
+            "w_prime_kj": _r((a.get("icu_w_prime") or 0) / 1000, 1) if a.get("icu_w_prime") else None,
+        },
+        "estimated_ftp_from_ride": {
+            "rolling_ftp": a.get("icu_rolling_ftp"),
+            "rolling_ftp_delta": a.get("icu_rolling_ftp_delta"),
+            "note": "Intervals' rolling estimate after this ride; a ride without "
+                    "a hard 3-20 min effort cannot raise it",
+        },
+        "main_set": m.interval_set(a.get("icu_intervals") or [], ftp),
+        "durability_qualifies": m.durability_qualifies(a),
+    }
+
+
+def _run_blocks(a: dict[str, Any], ftp: Any) -> dict[str, Any]:
+    """What a run is judged on: pace and GAP against threshold pace, speed
+    per beat for aerobic fitness. Power, when the watch records it, is a
+    second view: most running power is estimated by the watch from pace and
+    grade, so FTP-style ride metrics (W', kJ above FTP, rolling FTP) are left
+    out rather than read off a model."""
+    intervals = a.get("icu_intervals") or []
+    watts = a.get("icu_average_watts")
+    return {
+        "pace": _run_pace(a),
+        "aerobic": {
+            "speed_hr": m.run_efficiency(a.get("gap"), a.get("average_heartrate")),
+            "unit": "grade-adjusted m/min per bpm; higher is fitter, compare easy runs with easy runs",
+        },
+        "main_set": m.run_interval_set(intervals, a.get("threshold_pace")),
+        "run_power": {
+            "avg_w": _r(watts, 0),
+            "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
+            "ftp_used": ftp,
+            "note": "running power, usually estimated by the watch: a second "
+                    "view, never the basis of a verdict on a run",
+        } if watts else None,
+        "main_set_power": m.interval_set(intervals, ftp) if watts else None,
     }
 
 
@@ -681,7 +747,8 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         missing.append("no power on this ride: HR-only, so intensity and load are estimates")
     if a.get("type") in _RIDE_TYPES and rpe is None:
         missing.append("RPE and feel not logged in Intervals.icu -- ask how it felt")
-    run = a.get("type") in _RUN_TYPES
+    sport = _family(a)
+    run = sport == "running"
     if run and rpe is None:
         missing.append("RPE and feel not logged in Intervals.icu -- ask how it felt")
     if run and not a.get("threshold_pace"):
@@ -699,18 +766,11 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         "moving_min": round(moving / 60, 1) if moving else None,
         "distance_km": _r((a.get("distance") or 0) / 1000) if a.get("distance") else None,
         "elevation_m": _r(a.get("total_elevation_gain"), 0),
-        "sport": _family(a),
-        "pace": _run_pace(a) if run else None,
-        "power": {
-            "avg_w": _r(a.get("icu_average_watts"), 0),
-            "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
-            "icu_intensity": _r(a.get("icu_intensity")),
-            "variability_index": _r(a.get("icu_variability_index"), 2),
-            "efficiency_factor": _r(a.get("icu_efficiency_factor"), 2),
-            "lr_balance": _r(a.get("avg_lr_balance")),
-            "ftp_used": ftp,
-            "kj": _r((a.get("icu_joules") or 0) / 1000, 0) if a.get("icu_joules") else None,
-        },
+        "sport": sport,
+        # Each sport's own reading: a ride on power, a run on pace. Fields of
+        # the other sport are absent, not empty.
+        **(_ride_blocks(a, ftp) if sport == "cycling" else {}),
+        **(_run_blocks(a, ftp) if sport == "running" else {}),
         "hr": {
             "avg": a.get("average_heartrate"),
             "max": a.get("max_heartrate"),
@@ -721,41 +781,7 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
             "hrrc_bpm": a.get("icu_hrr"),
             "zone_minutes": [round(x / 60, 1) for x in hr_secs] if hr_secs else None,
         },
-        "aerobic": {
-            # Watts per beat over the ride and inside Z2: the trend of the Z2
-            # figure in coach_history is the cleanest aerobic-fitness signal
-            # these rides give.
-            "power_hr": _r(a.get("icu_power_hr"), 2),
-            "power_hr_z2": _r(a.get("icu_power_hr_z2"), 2),
-            "power_hr_z2_min": a.get("icu_power_hr_z2_mins"),
-        },
-        "anaerobic": {
-            "kj_above_ftp": _r((a.get("icu_joules_above_ftp") or 0) / 1000, 1)
-            if a.get("icu_joules_above_ftp") is not None else None,
-            "max_w_prime_depletion_kj": _r((a.get("icu_max_wbal_depletion") or 0) / 1000, 1)
-            if a.get("icu_max_wbal_depletion") is not None else None,
-            "w_prime_kj": _r((a.get("icu_w_prime") or 0) / 1000, 1) if a.get("icu_w_prime") else None,
-        },
-        "estimated_ftp_from_ride": {
-            "rolling_ftp": a.get("icu_rolling_ftp"),
-            "rolling_ftp_delta": a.get("icu_rolling_ftp_delta"),
-            "note": "Intervals' rolling estimate after this ride; a ride without "
-                    "a hard 3-20 min effort cannot raise it",
-        },
         "interval_summary": a.get("interval_summary"),
-        # A run is judged on pace even when the watch records power (a
-        # Forerunner estimates it on every run); the power read of the same
-        # reps rides alongside in main_set_power.
-        "main_set": (
-            m.run_interval_set(a.get("icu_intervals") or [], a.get("threshold_pace"))
-            if run
-            else m.interval_set(a.get("icu_intervals") or [], ftp)
-        ),
-        "main_set_power": (
-            m.interval_set(a.get("icu_intervals") or [], ftp)
-            if run and a.get("icu_average_watts")
-            else None
-        ),
         "warmup_min": round(a["icu_warmup_time"] / 60) if a.get("icu_warmup_time") else None,
         "fuel": m.fuel(moving, a.get("carbs_used"), a.get("carbs_ingested")),
         "cadence_avg": _r(a.get("average_cadence"), 0),
@@ -769,7 +795,6 @@ def activity(a: dict[str, Any]) -> dict[str, Any]:
         "rpe": rpe,
         "feel": a.get("feel"),
         "zones": zones,
-        "durability_qualifies": m.durability_qualifies(a),
         "dfa_a1_streams": dfa or None,
         "planned_event_id": a.get("paired_event_id"),
         "compliance_pct": _r(a.get("compliance")),
@@ -790,6 +815,8 @@ def sessions(acts: list[dict[str, Any]]) -> dict[str, Any]:
     rows = []
     for a in visible:
         moving = a.get("moving_time") or 0
+        sport = _family(a)
+        ride, run = sport == "cycling", sport == "running"
         secs, basis = _zone_secs(a)
         split = m.tid(*m.seiler(secs)) if secs else {}
         rows.append({
@@ -798,18 +825,25 @@ def sessions(acts: list[dict[str, Any]]) -> dict[str, Any]:
             "type": a.get("type"),
             "name": a.get("name"),
             "moving_min": round(moving / 60),
+            "sport": sport,
             "load": a.get("icu_training_load"),
-            "np_w": _r(a.get("icu_weighted_avg_watts"), 0),
-            "pace_gap": m.pace_str(a.get("gap")) if a.get("type") in _RUN_TYPES else None,
-            "if_pct": _r(a.get("icu_intensity"), 0),
-            "vi": _r(a.get("icu_variability_index"), 2),
+            # Ride columns on rides, run columns on runs, None elsewhere: one
+            # row shape, each sport read on its own terms.
+            "np_w": _r(a.get("icu_weighted_avg_watts"), 0) if ride else None,
+            "if_pct": _r(a.get("icu_intensity"), 0) if ride else None,
+            "vi": _r(a.get("icu_variability_index"), 2) if ride else None,
+            "ef": _r(a.get("icu_efficiency_factor"), 2) if ride else None,
+            "power_hr_z2": _r(a.get("icu_power_hr_z2"), 2) if ride else None,
+            "pace_gap": m.pace_str(a.get("gap")) if run else None,
+            "pct_threshold_pace": (
+                round(a["gap"] / a["threshold_pace"] * 100)
+                if run and a.get("gap") and a.get("threshold_pace") else None
+            ),
+            "run_speed_hr": m.run_efficiency(a.get("gap"), a.get("average_heartrate")) if run else None,
             "hr_avg": a.get("average_heartrate"),
-            "ef": _r(a.get("icu_efficiency_factor"), 2),
-            "power_hr_z2": _r(a.get("icu_power_hr_z2"), 2),
             "decoupling_pct": _r(a.get("decoupling")),
             "decoupling_readable": m.decoupling_read(
-                a.get("decoupling"), a.get("icu_variability_index"), moving,
-                run=a.get("type") in _RUN_TYPES,
+                a.get("decoupling"), a.get("icu_variability_index"), moving, run=run,
             )["readable"],
             "zones_basis": basis,
             "easy_grey_quality_pct": (
@@ -925,6 +959,23 @@ def week(
     }
 
 
+# A run counts toward the aerobic trend when it is long enough for HR to
+# settle and easy: at least this share of its zone time below the first
+# threshold, on pace or HR zones (never on estimated power).
+RUN_EF_MIN_SECS = 30 * 60
+RUN_EF_EASY_SHARE = 0.8
+
+
+def _easy_run(a: dict[str, Any]) -> bool:
+    secs, basis = _zone_secs(a)
+    if not secs or basis == "power":
+        secs = m.zone_seconds(a.get("icu_hr_zone_times"))
+    if not secs or sum(secs) <= 0:
+        return False
+    easy, _, _ = m.seiler(secs)
+    return easy / sum(secs) >= RUN_EF_EASY_SHARE
+
+
 def history(
     rows: list[dict[str, Any]], acts: list[dict[str, Any]], ftp: Any
 ) -> dict[str, Any]:
@@ -947,6 +998,7 @@ def history(
     ride_h: dict[str, float] = {}
     run_h: dict[str, float] = {}
     run_km: dict[str, float] = {}
+    run_ef: dict[str, list[float]] = {}
     for a in acts:
         if is_stub(a):
             continue
@@ -955,6 +1007,11 @@ def history(
         if a.get("type") in _RUN_TYPES:
             run_h[key] = run_h.get(key, 0.0) + (a.get("moving_time") or 0) / 3600
             run_km[key] = run_km.get(key, 0.0) + (a.get("distance") or 0) / 1000
+            # Speed per beat on easy runs only: a run with quality in it is
+            # faster per beat for reasons that are not aerobic fitness.
+            eff = m.run_efficiency(a.get("gap"), a.get("average_heartrate"))
+            if eff and (a.get("moving_time") or 0) >= RUN_EF_MIN_SECS and _easy_run(a):
+                run_ef.setdefault(key, []).append(eff)
             continue
         if a.get("type") not in _RIDE_TYPES:
             continue
@@ -986,14 +1043,19 @@ def history(
                 "ride_hours_visible": round(ride_h.get(k, 0.0), 1),
                 "run_hours_visible": round(run_h.get(k, 0.0), 1),
                 "run_km_visible": round(run_km.get(k, 0.0), 1),
+                "run_speed_hr_easy_mean": mean(run_ef.get(k, []), 3),
             }
             for k, v in weeks.items()
         ],
         "activities": {"visible": len(acts) - hidden, "hidden_strava": hidden},
         "missing_inputs": (
-            [f"{hidden} Strava-sourced activities hidden: EF trend covers visible rides only"]
+            [f"{hidden} Strava-sourced activities hidden: EF trends cover visible sessions only"]
             if hidden else []
         ),
+        "note": "ef_rides_mean and power_hr_z2_mean are the ride aerobic trend "
+                "(watts per beat); run_speed_hr_easy_mean is the run one "
+                "(grade-adjusted m/min per beat, easy runs of 30+ min only). "
+                "Read each against its own past, never one sport against the other",
     }
 
 

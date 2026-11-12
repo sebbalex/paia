@@ -86,12 +86,14 @@ lost on fuelling, and
 
 ## 3b. Reading a run
 
-`coach_activity` on a run carries `pace` (avg, `gap`, `pct_threshold`) and,
-for a structured run, a pace-based `main_set` (pace per rep, fade, CV). When
-the watch also records power (a Forerunner estimates it on every run), the
-same reps read in watts are in `main_set_power`; judge the run on pace, use
-watts as a second view. Zones on a run are pace (or GAP) first, power only
-when no pace zones came through.
+A run is read on running terms. `coach_activity` on a run carries `pace`
+(avg, `gap`, `pct_threshold`), `aerobic.speed_hr` and, for a structured run,
+a pace-based `main_set` (pace per rep, fade, CV). It carries none of the ride
+blocks (`power`, `anaerobic`, `estimated_ftp_from_ride`): those need measured
+power and an FTP, and running power is usually the watch's estimate. When the
+watch records it (a Forerunner does on every run), `run_power` and
+`main_set_power` give it as a second view; never base a verdict on it. Zones
+on a run are pace (or GAP) first, power only when no pace zones came through.
 
 - **Pace on hills is GAP.** Raw pace on a rolling route says nothing; judge
   `gap`, and on trail judge HR and vertical only.
@@ -104,8 +106,13 @@ when no pace zones came through.
 - **Main set:** `pace_fade_pct` within ±2 % held; −2 to −3 % tired; beyond
   −3 % target too fast or started too hard (rep 1 against the rest).
   `pace_cv_pct` > 4 % is uneven pacing or terrain.
-- **Decoupling on runs** is `rough` without power: a trend on flat, even
-  runs, nothing more.
+- **Decoupling on runs** is always `rough`, power or not: a trend on flat,
+  even runs, nothing more. Runs are not part of `coach_load.durability`.
+- **Speed per beat** (`aerobic.speed_hr`, grade-adjusted m/min per bpm): the
+  run's aerobic efficiency. One run means little; the weekly
+  `coach_history.run_speed_hr_easy_mean` (easy runs of 30+ min only) rising
+  over 4–8 weeks is aerobic fitness improving. Heat, hills not captured by
+  GAP (trail, mud) and poor sleep lower it. Never compare it with Pw:HR.
 - **Easy runs drifting to Z3** are the runner's version of the grey ride:
   slow down on climbs, walk if needed.
 - **Ask about niggles** after a run that was longer or faster than usual, or

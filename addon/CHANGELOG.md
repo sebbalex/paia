@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.26
+
+- The coach reads each sport on its own terms. A run no longer carries the ride analysis (power block, W′, kJ above FTP, rolling FTP): it gets pace, GAP, % of threshold pace, a pace-based main set and its own aerobic signal, speed per beat (grade-adjusted m/min per bpm). Watch-estimated running power is still there, as a second view only. A ride is unchanged.
+- Runs no longer leak into ride metrics: decoupling on a run is never judged by the variability index of estimated power, and durability counts rides only.
+- `coach_sessions` rows show ride columns on rides and run columns (GAP, % threshold pace, speed per beat) on runs. `coach_history` adds `run_speed_hr_easy_mean`, the weekly run aerobic trend on easy runs of 30+ minutes.
+- Weekly charts: the daily load chart now shows running load (it was missing), and the trend chart stacks bike and run hours ("Andamento settimanale: eFTP e ore per sport").
+
 ## 0.3.25
 
 - The coach reads a run's reps on pace again when the watch records power. A Forerunner estimates power on every run, so `coach_activity` judged every structured run like a ride (watts, % of FTP) and returned no pace per rep. Runs now always get the pace-based `main_set` (pace per rep, GAP, % of threshold, fade, CV), with the same reps in watts alongside in `main_set_power`. Run zones, and the training split built on them, now use pace or GAP zones first and power only when no pace zones came through.

@@ -121,10 +121,10 @@ Eight reads and one write, all over Intervals.icu:
 |---|---|
 | `coach_readiness` | today: HRV band, RHR, sleep, ImReady4, baseline Go/Modify/Skip |
 | `coach_load` | CTL/ATL/TSB, ramp, eFTP, load 7d per sport, monotony per sport, TID 7d/28d, durability (rides), ACWR |
-| `coach_sessions` | last 7–56 days, one row per session: the patterns, and ids |
-| `coach_activity` | one session in depth: main set rep by rep (power, or pace on a run), fade, HR creep, decoupling readability, run pace / GAP / % threshold, Pw:HR Z2, W′, fuel |
+| `coach_sessions` | last 7–56 days, one row per session: the patterns, and ids. Ride columns (NP, IF, VI, EF, Pw:HR Z2) on rides, run columns (GAP, % threshold pace, speed per beat) on runs |
+| `coach_activity` | one session in depth, read on its own sport's terms. Ride: power, main set in watts, Pw:HR Z2, W′, rolling FTP. Run: pace / GAP / % threshold, main set in pace, speed per beat; watch power only as a second view (`run_power`, `main_set_power`). Both: HR, decoupling readability, zones, fuel |
 | `coach_week` | planned vs done for an ISO week |
-| `coach_history` | weekly trend over months: CTL, load, eFTP, HRV, RHR, EF, Pw:HR Z2, ride hours, run hours and km |
+| `coach_history` | weekly trend over months: CTL, load, HRV, RHR; ride: eFTP, EF, Pw:HR Z2, hours; run: hours, km, speed per beat on easy runs |
 | `coach_power_curve` | bike only: best 5 s / 1 min / 5 min / 20 min / 60 min, 42 d vs 84 d vs 1 y, W/kg |
 | `coach_thresholds` | per sport: FTP, eFTP, zones in watts, sweet spot; run threshold pace and pace zones in min/km; LTHR, max HR, and whether a sport's HR zones were copied from the bike |
 | `coach_plan_workout` | the one write: a session onto the Intervals calendar → Garmin → watch or head unit (§5, "Putting a session on the device") |
