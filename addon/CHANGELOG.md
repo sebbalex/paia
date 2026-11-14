@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.32
+
+- Coach: runs now carry lap_detail, pace, GAP pace and heart rate for every block, so a long run built from different blocks (no repeats) can be read per block.
+
 ## 0.3.31
 
 - fix: telegram audio transcript cause OOM kill

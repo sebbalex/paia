@@ -786,6 +786,27 @@ def test_running() -> None:
     check("pace zone 1 open slow edge", zones[0], {"zone": "Z1", "slowest": None, "fastest": "5:23/km"})
     check("pace zone top open fast edge", zones[2]["fastest"], None)
 
+    blocks = [  # three different blocks, no repeats: 10' / 80' / 30'
+        {"type": "WORK", "group_id": "c", "start_time": 5400, "moving_time": 1800, "distance": 5400.4,
+         "average_speed": 3.0, "gap": 3.1, "average_heartrate": 151, "max_heartrate": 160},
+        {"type": "WORK", "group_id": "a", "start_time": 0, "moving_time": 600, "distance": 1800,
+         "average_speed": 3.0, "average_heartrate": 120, "max_heartrate": 130, "average_cadence": 80.4},
+        {"type": "WORK", "group_id": "b", "start_time": 600, "moving_time": 4800, "distance": 15600,
+         "average_speed": 3.25, "gap": 3.3, "label": "steady"},
+    ]
+    check("no repeats, no main set", m.run_interval_set(blocks, 4.0), None)
+    laps = m.run_laps(blocks + [{"type": "RECOVERY", "start_time": 7200, "moving_time": 1}])
+    check("stub row dropped", (laps["total"], laps["truncated"]), (3, False))
+    laps = laps["laps"]
+    check("laps in time order", [l["secs"] for l in laps], [600, 4800, 1800])
+    check("lap pace", [l["pace"] for l in laps], ["5:33/km", "5:08/km", "5:33/km"])
+    check("lap gap pace only when present", [l["gap_pace"] for l in laps], [None, "5:03/km", "5:23/km"])
+    check("lap distance rounded", laps[2]["distance_m"], 5400)
+    check("lap cadence and label", (laps[0]["cadence"], laps[1]["label"]), (80, "steady"))
+    check("no intervals, no laps", m.run_laps([]), None)
+    capped = m.run_laps([{"moving_time": 60, "start_time": n} for n in range(40)])
+    check("laps capped and flagged", (len(capped["laps"]), capped["total"], capped["truncated"]), (30, 40, True))
+
     a = icu_mod.activity(run(0))
     check("run sport family", a["sport"], "running")
     check("run gap pace", a["pace"]["gap"], "5:33/km")

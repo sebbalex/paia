@@ -777,6 +777,7 @@ def _run_blocks(a: dict[str, Any], ftp: Any) -> dict[str, Any]:
             "unit": "grade-adjusted m/min per bpm; higher is fitter, compare easy runs with easy runs",
         },
         "main_set": m.run_interval_set(intervals, a.get("threshold_pace")),
+        "lap_detail": m.run_laps(intervals),
         "run_power": {
             "avg_w": _r(watts, 0),
             "np_w": _r(a.get("icu_weighted_avg_watts"), 0),

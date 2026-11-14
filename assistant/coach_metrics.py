@@ -828,6 +828,38 @@ def zone_paces(threshold_ms: float | None, upper_pcts: Sequence[float] | None) -
     return out
 
 
+def run_laps(intervals: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
+    """Every interval of a run as one row, repeats or not.
+
+    run_interval_set only reports groups of two or more equal reps, so a long
+    run built as three different blocks has none and its pace per block never
+    reaches the assistant. Pure formatting of icu_intervals, in time order.
+    Warmup and cooldown arrive typed WORK like everything else, so position in
+    the list is the only cue. Stub rows under 10 s (Intervals closes a run with
+    a 1 s RECOVERY) are dropped, as run_interval_set does. `total` says when
+    the 30-row cap cut the list.
+    """
+    rows = [i for i in intervals if (i.get("moving_time") or 0) >= 10]
+    if not rows:
+        return None
+    rows.sort(key=lambda i: i.get("start_time") or 0)
+    laps = [
+        {
+            "type": i.get("type"),
+            "label": i.get("label"),
+            "secs": i.get("moving_time"),
+            "distance_m": round(i["distance"]) if i.get("distance") is not None else None,
+            "pace": pace_str(i.get("average_speed")),
+            "gap_pace": pace_str(i.get("gap")),
+            "hr_avg": i.get("average_heartrate"),
+            "hr_max": i.get("max_heartrate"),
+            "cadence": round(i["average_cadence"]) if i.get("average_cadence") else None,
+        }
+        for i in rows[:30]
+    ]
+    return {"total": len(rows), "truncated": len(rows) > 30, "laps": laps}
+
+
 def run_interval_set(intervals: Iterable[dict[str, Any]], threshold_ms: float | None) -> dict[str, Any] | None:
     """The main set of a structured run without power, judged on pace.
 
