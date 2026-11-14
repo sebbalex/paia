@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.31
+
+- fix: telegram audio transcript cause OOM kill
+
 ## 0.3.30
 
 - Run decoupling judges steadiness on raw speed, not grade-adjusted speed. Grade adjustment moves speed about 5 % per 1 % of slope, so an evenly paced run on gentle rollers read as unsteady and its decoupling came back only as rough. Hills stay with the climbing check and the drift figure stays grade-adjusted; the cut-offs are unchanged.

@@ -58,7 +58,7 @@ async def run() -> None:
     # the log, nowhere else.
     pairing = Pairing(cfg.state_dir, configured=cfg.allowed_user_ids)
     owners = cfg.allowed_user_ids or pairing.owners()
-    telegram = Telegram(cfg.bot_token, owners, pairing)
+    telegram = Telegram(cfg.bot_token, owners, pairing, cfg.state_dir)
     transcriber = Transcriber(
         model_name=cfg.whisper_model,
         compute_type=cfg.whisper_compute_type,

@@ -68,15 +68,36 @@ class Telegram:
     PAIRING_HINT = "Send the pairing code shown in the add-on Log tab."
 
     def __init__(self, token: str, allowed_user_ids: frozenset[int] | set[int],
-                 pairing: Pairing | None = None) -> None:
+                 pairing: Pairing | None = None,
+                 state_dir: Path | None = None) -> None:
         self._base = f"https://api.telegram.org/bot{token}"
         self._file_base = f"https://api.telegram.org/file/bot{token}"
         # Mutable only so pairing can add the owner; nothing else calls allow().
         self._allowed = set(allowed_user_ids)
         self._pairing = pairing
         self._hinted: dict[int, float] = {}
-        self._offset: int | None = None
+        # Persisted before an update is handled, so a crash while handling it
+        # (an OOM kill on a voice note, say) skips it on restart instead of
+        # Telegram redelivering it forever. At-most-once on purpose.
+        self._offset_file = state_dir / "telegram_offset" if state_dir else None
+        self._offset: int | None = self._load_offset()
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(65.0, connect=10.0))
+
+    def _load_offset(self) -> int | None:
+        try:
+            return int(self._offset_file.read_text().strip()) if self._offset_file else None
+        except (OSError, ValueError):
+            return None
+
+    def _save_offset(self) -> None:
+        if self._offset_file is None:
+            return
+        try:
+            tmp = self._offset_file.with_suffix(".tmp")
+            tmp.write_text(str(self._offset))
+            tmp.replace(self._offset_file)
+        except OSError as exc:
+            log.warning("could not persist telegram offset (%s)", exc)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -115,6 +136,7 @@ class Telegram:
 
             for update in updates:
                 self._offset = update["update_id"] + 1
+                self._save_offset()
                 message = update.get("message") or {}
                 sender = (message.get("from") or {}).get("id")
                 chat = (message.get("chat") or {}).get("id")
